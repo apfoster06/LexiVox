@@ -6,7 +6,7 @@ import pytest
 from conftest import BASE, HDR, install_fake_model, needs_ffmpeg, wait_for
 
 from app import services
-from app.dictation.hotkey import HotkeyError, HotkeyListener, parse_hotkey
+from app.dictation.hotkey import HotkeyError, HotkeyListener, ModifierChord, parse_hotkey
 from app.dictation.recorder import RecorderError
 
 windows_only = pytest.mark.skipif(os.name != "nt", reason="Windows API")
@@ -33,6 +33,60 @@ def test_parse_hotkey_normalizes(combo, expected):
 def test_parse_hotkey_rejects(combo):
     with pytest.raises(HotkeyError):
         parse_hotkey(combo)
+
+
+def test_modifier_only_chords():
+    assert parse_hotkey("win+ctrl") == (0x2 | 0x8, 0, "Ctrl+Win")
+    assert parse_hotkey("Ctrl+Alt")[2] == "Ctrl+Alt"
+    for bad in ("Alt+Shift", "Ctrl+Shift", "Ctrl+Ctrl"):
+        with pytest.raises(HotkeyError):
+            parse_hotkey(bad)
+
+
+CTRL, LWIN, D, SHIFT = 0xA2, 0x5B, 0x44, 0xA0
+
+
+def _chord(pressed=None):
+    fired, masked = [], []
+    chord = ModifierChord(0x2 | 0x8, lambda: fired.append(1), lambda: masked.append(1), pressed)
+    return chord, fired, masked
+
+
+def test_chord_fires_once_on_release():
+    chord, fired, masked = _chord()
+    for vk, down in [(CTRL, True), (LWIN, True), (LWIN, True), (LWIN, False), (CTRL, False)]:
+        chord.on_key(vk, down)
+    assert fired == [1]
+    assert masked == [1]  # Start menu suppressed once
+
+
+def test_chord_ignores_ctrl_win_plus_another_key():
+    chord, fired, _ = _chord()
+    for vk, down in [(CTRL, True), (LWIN, True), (D, True), (D, False), (LWIN, False), (CTRL, False)]:
+        chord.on_key(vk, down)
+    assert fired == []
+
+
+def test_chord_ignores_extra_modifier_and_single_modifier():
+    chord, fired, _ = _chord()
+    for vk, down in [(CTRL, True), (LWIN, True), (SHIFT, True), (SHIFT, False), (LWIN, False), (CTRL, False)]:
+        chord.on_key(vk, down)
+    for vk, down in [(CTRL, True), (CTRL, False), (LWIN, True), (LWIN, False)]:
+        chord.on_key(vk, down)
+    assert fired == []
+
+
+def test_chord_recovers_from_missed_key_up():
+    held = {CTRL}
+    chord, fired, _ = _chord(lambda vk: vk in held)
+    chord.on_key(LWIN, True)  # Win down, then its key-up is lost (e.g. Win+L)
+    chord.on_key(CTRL, True)  # stale Win is pruned, so Ctrl alone doesn't arm
+    chord.on_key(CTRL, False)
+    assert fired == []
+    held.add(LWIN)
+    for vk, down in [(CTRL, True), (LWIN, True), (LWIN, False), (CTRL, False)]:
+        chord.on_key(vk, down)
+    assert fired == [1]
 
 
 def test_parse_hotkey_codes():
@@ -137,6 +191,24 @@ def test_real_hotkey_fires_on_keypress():
             user32.keybd_event(vk, 0, 0, 0)
         for vk in reversed(keys):
             user32.keybd_event(vk, 0, 2, 0)  # KEYEVENTF_KEYUP
+        assert pressed.wait(3)
+    finally:
+        listener.set("")
+        listener.stop()
+
+
+@windows_only
+def test_real_modifier_chord_via_keyboard_hook():
+    pressed = threading.Event()
+    listener = HotkeyListener(pressed.set)
+    listener.start()
+    try:
+        listener.set("Ctrl+Alt")  # no Win key, so a failed test can't open the Start menu
+        user32 = ctypes.windll.user32
+        for vk in (0xA2, 0xA4):
+            user32.keybd_event(vk, 0, 0, 0)
+        for vk in (0xA4, 0xA2):
+            user32.keybd_event(vk, 0, 2, 0)
         assert pressed.wait(3)
     finally:
         listener.set("")

@@ -92,7 +92,8 @@ class SettingsStore:
     def _load(self) -> Settings:
         defaults = Settings()
         try:
-            raw = json.loads(self._path.read_text(encoding="utf-8"))
+            # utf-8-sig: tolerate a BOM (Notepad and PowerShell add one when editing).
+            raw = json.loads(self._path.read_text(encoding="utf-8-sig"))
         except FileNotFoundError:
             return defaults
         except (OSError, ValueError) as e:

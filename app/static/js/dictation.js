@@ -81,20 +81,38 @@ function wireDictation() {
     $("hotkey-capture").hidden = false;
     $("hotkey-change").textContent = "Cancel";
   });
-  window.addEventListener("keydown", (e) => {
-    if (!dict.capturing) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key === "Escape") { stopCapture(); return; }
-    const key = keyName(e.code);
-    if (!key) return; // a modifier on its own; wait for the real key
+  // Modifiers seen while capturing, so a modifier-only chord (e.g. Ctrl+Win) can be
+  // saved when its keys are released.
+  let chordMods = new Set();
+  const modsOf = (e) => {
     const mods = [];
     if (e.ctrlKey) mods.push("Ctrl");
     if (e.altKey) mods.push("Alt");
     if (e.shiftKey) mods.push("Shift");
     if (e.metaKey) mods.push("Win");
+    return mods;
+  };
+  window.addEventListener("keydown", (e) => {
+    if (!dict.capturing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Escape") { stopCapture(); chordMods = new Set(); return; }
+    const key = keyName(e.code);
+    if (!key) { modsOf(e).forEach((m) => chordMods.add(m)); return; }
+    chordMods = new Set();
     stopCapture();
-    saveHotkey([...mods, key].join("+"));
+    saveHotkey([...modsOf(e), key].join("+"));
+  }, true);
+  window.addEventListener("keyup", (e) => {
+    if (!dict.capturing || !chordMods.size) return;
+    e.preventDefault();
+    const order = ["Ctrl", "Alt", "Shift", "Win"];
+    const combo = order.filter((m) => chordMods.has(m));
+    chordMods = new Set();
+    if (combo.length >= 2) {
+      stopCapture();
+      saveHotkey(combo.join("+"));
+    }
   }, true);
 }
 
