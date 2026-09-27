@@ -76,8 +76,13 @@ class Engine:
         self.settings = settings
         self._choices: list[Choice] | None = None
         self._run_lock = threading.Lock()
+        self._probe_lock = threading.Lock()
 
     def choices(self, refresh: bool = False) -> list[Choice]:
+        with self._probe_lock:
+            return self._probe(refresh)
+
+    def _probe(self, refresh: bool) -> list[Choice]:
         if self._choices is None or refresh:
             found: list[Choice] = []
             for name, backend in self.backends.items():

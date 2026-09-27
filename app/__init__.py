@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -85,6 +86,8 @@ def create_app(
 
     if start_worker:
         jobs.start()
+        # Probing devices imports the engines (slow); do it before the window asks.
+        threading.Thread(target=engine.choices, name="device-probe", daemon=True).start()
     return app
 
 
