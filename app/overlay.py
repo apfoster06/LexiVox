@@ -30,11 +30,11 @@ HWND_TOPMOST = -1
 MONITOR_DEFAULTTOPRIMARY = 1
 
 KEY = "#ff00fe"  # transparent colour for the rounded ends
-BG, FG = "#1f232a", "#f2f4f8"
-STYLE = {  # state -> (dot colour, label)
-    "recording": ("#ff4b4b", "Recording"),
-    "transcribing": ("#f0b429", "Transcribing…"),
-    "polishing": ("#b28cff", "Polishing…"),
+BG, FG = "#120a26", "#f5f0ff"  # brand ink and its light text
+STYLE = {  # state -> (dot colour, label); same colour language as the tray icon
+    "recording": ("#ff6b00", "Recording"),  # ember
+    "transcribing": ("#8b5cff", "Transcribing…"),  # ultraviolet, lifted to read on ink
+    "polishing": ("#ccff00", "Polishing…"),  # volt
 }
 LONG, SHORT = 210, 38  # pill size at 100% scaling
 MARGIN = 16
@@ -156,14 +156,14 @@ class RecordingOverlay:
                 canvas.create_rectangle(r // 2, 0, w - r // 2, h, fill=BG, outline="")
             d = round(12 * scale)
             c = r // 2
-            dot = canvas.create_oval(c - d // 2, c - d // 2, c + d // 2, c + d // 2, fill="#ff4b4b", outline="")
+            dot = canvas.create_oval(c - d // 2, c - d // 2, c + d // 2, c + d // 2, fill=STYLE["recording"][0], outline="")
             font = ("Segoe UI", -round(14 * scale), "bold")  # negative = pixels
             if position == "right":
                 # Reads top to bottom, like a book spine.
                 label = canvas.create_text(c, r + round(2 * scale), anchor="w", angle=-90, fill=FG, font=font)
             else:
                 label = canvas.create_text(r, c, anchor="w", fill=FG, font=font)
-            meter = canvas.create_rectangle(0, 0, 0, 0, fill="#ff4b4b", outline="")
+            meter = canvas.create_rectangle(0, 0, 0, 0, fill=STYLE["recording"][0], outline="")
             return {"dot": dot, "label": label, "meter": meter}
 
         items: dict = {}

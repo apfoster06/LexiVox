@@ -26,8 +26,10 @@ function renderDictation(update) {
   else status = s.hotkey ? "Ready" : "Ready. Click the mic or set a shortcut in Settings.";
   $("dict-status").textContent = status;
   const level = $("dict-level");
+  const loudness = recording ? Math.min(1, (s.level || 0) * 3) : 0;
   level.hidden = !recording;
-  level.value = Math.min(1, (s.level || 0) * 3);
+  level.value = loudness;
+  btn.style.setProperty("--level", String(loudness)); // the tile swells with your voice
 
   if (s.hotkey !== undefined) {
     $("hk-dictate").textContent = s.hotkey || "Off";
