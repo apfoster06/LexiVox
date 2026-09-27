@@ -86,33 +86,49 @@ def fake_backend() -> FakeBackend:
 
 
 class FakeRecorder:
-    """Pretends to record by copying a prepared WAV file."""
+    """Pretends to record: all of `source` (a WAV file) is 'heard' as soon as it starts."""
 
     max_seconds = 900
 
     def __init__(self):
+        import numpy as np
+
         self.source: Path | None = None
-        self.duration = 2.0
+        self.duration: float | None = None  # override what stop() reports
         self.level = 0.0
         self.recording = False
         self.fail: Exception | None = None
+        self.rate = 16000
+        self.samples = np.zeros(0, np.int16)
 
     def start(self, device_name: str = ""):
+        import wave
+
+        import numpy as np
+
         if self.fail:
             raise self.fail
         self.device_name = device_name
         self.recording = True
+        if self.source is not None:
+            with wave.open(str(self.source)) as w:
+                self.rate = w.getframerate()
+                self.samples = np.frombuffer(w.readframes(w.getnframes()), np.int16).copy()
+        else:
+            self.samples = np.zeros(self.rate * 2, np.int16)
+
+    def total(self):
+        return len(self.samples)
+
+    def read(self, start, end):
+        return self.samples[start:end].copy()
 
     def seconds(self):
-        return 0.5 if self.recording else 0.0
+        return len(self.samples) / self.rate if self.recording else 0.0
 
-    def stop(self, dst: Path) -> float:
+    def stop(self) -> float:
         self.recording = False
-        if self.source is not None:
-            shutil.copy(self.source, dst)
-        else:
-            dst.write_bytes(b"")
-        return self.duration
+        return self.duration if self.duration is not None else len(self.samples) / self.rate
 
     def cancel(self):
         self.recording = False

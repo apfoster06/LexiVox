@@ -17,6 +17,12 @@ os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 os.environ["DO_NOT_TRACK"] = "1"
 
+import sys  # noqa: E402
+
+# OpenVINO ships an opt-in telemetry package used only by its model-conversion tools,
+# which we never run. Blocking the module guarantees it can't load in this process.
+sys.modules["openvino_telemetry"] = None
+
 import argparse  # noqa: E402
 import logging  # noqa: E402
 import secrets  # noqa: E402

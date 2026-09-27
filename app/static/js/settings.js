@@ -81,6 +81,7 @@ function renderSettings(s) {
   langSel.value = st.language;
   $("translate-check").checked = st.translate;
 
+  renderEngines(s);
   const backend = s.choice && s.choice.backend;
   const modelSel = $("model-select");
   modelSel.replaceChildren();
@@ -94,6 +95,26 @@ function renderSettings(s) {
   modelSel.value = s.effective_model;
   renderModelStatus();
   renderDownload(s.download);
+}
+
+const BACKEND_LABELS = { openvino: "OpenVINO", "faster-whisper": "faster-whisper", whispercpp: "whisper.cpp" };
+
+function engineLabel(c) {
+  const kind = { gpu: "GPU", npu: "NPU", cpu: "CPU" }[c.device.kind] || c.device.kind;
+  return `${kind}: ${c.device.name} (${BACKEND_LABELS[c.backend] || c.backend})`;
+}
+
+function renderEngines(s) {
+  const sel = $("set-engine");
+  sel.replaceChildren(
+    el("option", { value: "", text: "Automatic (fastest available)" }),
+    el("option", { value: "cpu", text: "CPU only (don't use a GPU)" }),
+  );
+  const order = { gpu: 0, npu: 1, cpu: 2 };
+  for (const c of [...s.choices].sort((a, b) => order[a.device.kind] - order[b.device.kind])) {
+    sel.append(el("option", { value: c.key, text: engineLabel(c) }));
+  }
+  sel.value = s.settings.engine;
 }
 
 function modelInfo() {
@@ -214,6 +235,9 @@ document.addEventListener("DOMContentLoaded", () => {
     await saveSetting({ vocabulary: $("set-vocab").value });
     $("vocab-status").textContent = "Saved.";
     setTimeout(() => { $("vocab-status").textContent = ""; }, 1500);
+  });
+  $("set-engine").addEventListener("change", (e) => {
+    saveSetting({ engine: e.target.value }).then(() => loadState());
   });
   $("model-select").addEventListener("change", () => {
     saveSetting({ model: $("model-select").value }).then(() => loadState());

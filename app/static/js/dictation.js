@@ -34,6 +34,12 @@ function renderDictation(update) {
     $("hk-polish").textContent = s.polish_hotkey || "Off";
     $("hk-polish-wrap").hidden = !s.polish_hotkey;
   }
+  // Text transcribed so far (chunks finish while you're still talking).
+  if (s.partial !== undefined) {
+    const live = s.state !== "idle" && s.partial;
+    $("dict-partial").hidden = !live;
+    $("dict-partial").textContent = live ? s.partial : "";
+  }
   if (s.error !== undefined) {
     $("dict-error").textContent = s.error || "";
     $("dict-error").hidden = !s.error;

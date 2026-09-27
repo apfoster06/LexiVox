@@ -15,6 +15,29 @@ from .hardware import cpu_name
 
 log = logging.getLogger(__name__)
 
+_dll_dirs_added = False
+
+
+def add_cuda_dll_dirs() -> None:
+    """The nvidia-cublas-cu12 / nvidia-cudnn-cu12 wheels (the "nvidia" extra) put their
+    DLLs under site-packages/nvidia/*/bin, which Windows doesn't search on its own."""
+    global _dll_dirs_added
+    if _dll_dirs_added or os.name != "nt":
+        return
+    _dll_dirs_added = True
+    for package in ("nvidia.cublas", "nvidia.cudnn", "nvidia.cuda_nvrtc"):
+        try:
+            spec = importlib.util.find_spec(package)
+        except ModuleNotFoundError:  # no "nvidia" parent package: not an NVIDIA install
+            continue
+        if spec is None or not spec.submodule_search_locations:
+            continue
+        for location in spec.submodule_search_locations:
+            bin_dir = Path(location) / "bin"
+            if bin_dir.is_dir():
+                os.add_dll_directory(str(bin_dir))
+                os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+
 
 class FasterWhisperBackend:
     name = "faster-whisper"
@@ -29,6 +52,7 @@ class FasterWhisperBackend:
 
     def available_devices(self) -> list[Device]:
         devices: list[Device] = []
+        add_cuda_dll_dirs()
         try:
             import ctranslate2
 

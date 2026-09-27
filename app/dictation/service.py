@@ -23,7 +23,8 @@ from ..engine import Engine, ModelMissing
 from ..events import EventBus
 from ..textproc import remove_fillers, vocabulary_prompt
 from .hotkey import HotkeyError, HotkeyListener, parse_hotkey
-from .recorder import MicRecorder, RecorderError
+from .pipeline import ChunkPipeline
+from .recorder import MicRecorder, RecorderError, write_wav
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +83,7 @@ class DictationService:
         self._lock = threading.Lock()
         self._cancel = threading.Event()
         self._hotkeys: HotkeyListener | None = None
+        self._pipeline: ChunkPipeline | None = None
 
     # ---- hotkeys ------------------------------------------------------------------
 
@@ -139,6 +141,8 @@ class DictationService:
                 self.state = "idle"
             elif self.state in ("transcribing", "polishing"):
                 self._cancel.set()
+            if self._pipeline is not None:
+                self._pipeline.abort()
         self._publish()
 
     def _sounds(self) -> bool:
@@ -156,11 +160,17 @@ class DictationService:
             self.error = str(e)
             self._publish()
             return
+        chunk_polish = self.polisher if mode == "polish" and s.polish_style == "clean" else None
+        self._pipeline = ChunkPipeline(
+            self.recorder, self._transcribe_chunk, chunk_polish, self._cancel, self._publish
+        )
         self.state = "recording"
         if self._sounds():
             _beep(880)
         self._publish()
         threading.Thread(target=self._monitor, name="dictation-monitor", daemon=True).start()
+        # Load the speech model (and the AI model) while the user is talking.
+        threading.Thread(target=self.engine.preload, args=(self.model_for(),), daemon=True).start()
         if mode == "polish" and self.polisher == self._ollama_polish:
             threading.Thread(target=self._warm_ollama, name="ollama-warmup", daemon=True).start()
 
@@ -174,28 +184,43 @@ class DictationService:
             pass  # reported when polishing, if it's still down
 
     def _monitor(self) -> None:
-        """Push level/elapsed updates to the UI and auto-stop at the length limit."""
+        """Cut finished speech into chunks, push level/elapsed updates to the UI, and
+        auto-stop at the length limit."""
+        pipeline = self._pipeline
         while self.state == "recording":
             if self.recorder.seconds() >= self.recorder.max_seconds:
                 self.toggle()
                 return
+            if pipeline is not None:
+                pipeline.poll()
             self._publish(light=True)
             time.sleep(0.25)
 
     def _finish(self) -> None:
-        raw = self.temp_dir / f"{uuid.uuid4().hex}-mic.wav"
-        wav = self.temp_dir / f"{uuid.uuid4().hex}-mic16k.wav"
+        pipeline = self._pipeline
         if self._sounds():
             _beep(520)
         try:
-            seconds = self.recorder.stop(raw)
+            seconds = self.recorder.stop()
             if seconds < MIN_SECONDS:
+                pipeline.discard()
                 raise _Soft("Recording was too short.")
-            audio.to_wav16k(raw, wav, self._cancel)
-            text, engine_key = self._transcribe(wav)
+            pipeline.finish()  # only the last chunk is left to transcribe
+            if self._cancel.is_set():
+                raise Cancelled()
+            if pipeline.error is not None:
+                raise pipeline.error
+            text = pipeline.text
+            if not text:
+                raise _Soft("No speech was heard.")
             polished = False
             if self.mode == "polish":
-                text, polished = self._polish(text)
+                if pipeline.fully_polished:
+                    text, polished = " ".join(pipeline.polished), True
+                elif pipeline.polish_error is not None:
+                    self.error = f"{pipeline.polish_error} Pasted the text as spoken."
+                else:
+                    text, polished = self._polish(text)
             self.copy(text)
             pasted = self._paste()
             self.history.appendleft({
@@ -203,7 +228,8 @@ class DictationService:
                 "pasted": pasted, "polished": polished,
             })
             log.info(
-                "dictation: %.1fs on %s, polished=%s, pasted=%s", seconds, engine_key, polished, pasted
+                "dictation: %.1fs in %d chunks, polished=%s, pasted=%s",
+                seconds, pipeline.chunks, polished, pasted,
             )
         except Cancelled:
             pass
@@ -213,28 +239,32 @@ class DictationService:
             log.exception("dictation failed")
             self.error = f"Dictation failed: {type(e).__name__}. See the log folder."
         finally:
-            for p in (raw, wav):
-                p.unlink(missing_ok=True)
+            self._pipeline = None
             with self._lock:
                 self.state = "idle"
             self._publish()
 
-    def _transcribe(self, wav: Path) -> tuple[str, str]:
-        s = self.settings.get()
-        opts = TranscribeOptions(
-            language=None if s.language == "auto" else s.language,
-            translate=s.translate,
-            prompt=vocabulary_prompt(s.vocabulary),
-        )
-        segments, choice, _ = self.engine.transcribe(
-            wav, self.model_for(), opts, lambda seg: None, lambda notice: None, self._cancel
-        )
-        text = " ".join(seg.text.strip() for seg in segments if seg.text.strip())
-        if s.remove_fillers:
-            text = remove_fillers(text)
-        if not text:
-            raise _Soft("No speech was heard.")
-        return text, choice.key
+    def _transcribe_chunk(self, samples, rate: int, context: str) -> str:
+        """Transcribe one stretch of recorded audio. Runs on the pipeline's worker."""
+        raw = self.temp_dir / f"{uuid.uuid4().hex}-mic.wav"
+        wav = self.temp_dir / f"{uuid.uuid4().hex}-mic16k.wav"
+        try:
+            write_wav(raw, samples, rate)
+            audio.to_wav16k(raw, wav, self._cancel)
+            s = self.settings.get()
+            prompt = " ".join(p for p in (vocabulary_prompt(s.vocabulary), context) if p) or None
+            opts = TranscribeOptions(
+                language=None if s.language == "auto" else s.language,
+                translate=s.translate, prompt=prompt,
+            )
+            segments, _, _ = self.engine.transcribe(
+                wav, self.model_for(), opts, lambda seg: None, lambda notice: None, self._cancel
+            )
+            text = " ".join(seg.text.strip() for seg in segments if seg.text.strip())
+            return remove_fillers(text) if s.remove_fillers else text
+        finally:
+            raw.unlink(missing_ok=True)
+            wav.unlink(missing_ok=True)
 
     def _polish(self, text: str) -> tuple[str, bool]:
         """Returns (text, polished). Falls back to the spoken text if Ollama fails."""
@@ -281,6 +311,7 @@ class DictationService:
                 hotkey=s.hotkey,
                 polish_hotkey=s.polish_hotkey,
                 hotkey_errors=dict(self.hotkey_errors),
+                partial=self._pipeline.text if self._pipeline is not None else "",
                 error=self.error,
                 history=list(self.history)[:10],
             )

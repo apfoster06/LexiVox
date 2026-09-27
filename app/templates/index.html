@@ -35,6 +35,7 @@
         </button>
         <div id="dict-status" class="dict-status" aria-live="polite">Ready</div>
         <progress id="dict-level" max="1" value="0" hidden aria-label="Microphone level"></progress>
+        <p id="dict-partial" class="dict-partial" hidden></p>
         <div class="hints">
           <span><kbd id="hk-dictate">–</kbd> dictate</span>
           <span id="hk-polish-wrap"><kbd id="hk-polish">–</kbd> dictate + AI polish</span>
@@ -160,6 +161,12 @@
 
         <fieldset>
           <legend>Speech recognition</legend>
+          <div class="field">
+            <label for="set-engine">Engine</label>
+            <select id="set-engine"></select>
+            <p class="hint">Automatic picks the fastest hardware (NVIDIA or Intel GPU, then CPU). If a GPU
+              fails, the app finishes on the CPU. Each engine uses its own copy of the model.</p>
+          </div>
           <div class="field">
             <label for="model-select">Model</label>
             <select id="model-select"><option>Detecting hardware…</option></select>

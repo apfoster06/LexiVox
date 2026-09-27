@@ -112,6 +112,10 @@ main { flex: 1; min-height: 0; padding: 16px; overflow: auto; }
 @media (prefers-reduced-motion: reduce) { .mic-btn.recording { animation: none; } }
 .dict-status { font-size: 17px; font-weight: 600; min-height: 1.5em; }
 #dict-level { width: min(280px, 80%); }
+.dict-partial {
+  margin: 0; max-width: 560px; max-height: 6.5em; overflow: auto; color: var(--muted);
+  font-size: 14px; text-align: left; border-left: 3px solid var(--border); padding-left: 10px;
+}
 .hints { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; color: var(--muted); font-size: 13px; }
 kbd {
   font: 600 12px/1 "Segoe UI", system-ui, sans-serif; padding: 4px 7px; border-radius: 6px;

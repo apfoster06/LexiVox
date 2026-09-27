@@ -21,6 +21,13 @@ def pick(pairs, cpu_winner=None):
     return auto_order([Choice(b, d) for b, d in pairs], cpu_winner)[0]
 
 
+def test_cuda_dll_setup_is_harmless_without_nvidia_packages():
+    import app.backends.faster_whisper_backend as fw
+
+    fw._dll_dirs_added = False
+    fw.add_cuda_dll_dirs()  # must not raise on a machine without the "nvidia" extra
+
+
 def test_nvidia_only():
     c = pick([("faster-whisper", CPU), ("faster-whisper", NV)])
     assert (c.backend, c.device) == ("faster-whisper", NV)

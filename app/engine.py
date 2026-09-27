@@ -85,6 +85,9 @@ class Engine:
         self._choices: list[Choice] | None = None
         self._run_lock = threading.Lock()
         self._probe_lock = threading.Lock()
+        # Devices that failed this session; skipped until restart so every dictation
+        # chunk doesn't retry a broken GPU first.
+        self.failed: set[str] = set()
 
     def choices(self, refresh: bool = False) -> list[Choice]:
         with self._probe_lock:
@@ -117,17 +120,34 @@ class Engine:
         s = self.settings.get()
         if s.force_cpu:
             return self.cpu_choice()
-        if s.backend:
-            manual = self._find(f"{s.backend}|{s.device}")
-            if manual:
-                return manual
-        best = s.benchmark.get("best")
-        if best:
-            found = self._find(best)
+        for key in (f"{s.backend}|{s.device}" if s.backend else "", s.benchmark.get("best", "")):
+            found = self._find(key) if key and key not in self.failed else None
             if found:
                 return found
-        ordered = auto_order(self.choices(), s.benchmark.get("cpu_winner"))
+        usable = [c for c in self.choices() if c.key not in self.failed]
+        ordered = auto_order(usable, s.benchmark.get("cpu_winner"))
         return ordered[0] if ordered else None
+
+    def preload(self, model: str) -> None:
+        """Load the model for the current choice ahead of time (e.g. when recording starts)."""
+        choice = self.current()
+        if choice is None:
+            return
+        spec = self.models.spec(choice.backend, model)
+        if spec is None:
+            return
+        try:
+            with self._run_lock:
+                self._unload_others(choice.backend)
+                self.backends[choice.backend].load(spec, choice.device)
+            log.info("ready: %s model on %s (%s)", model, choice.device.name, choice.backend)
+        except Exception as e:
+            log.warning("preloading %s on %s failed: %s", choice.backend, choice.device.name, e)
+
+    def _unload_others(self, keep: str) -> None:
+        for name, backend in self.backends.items():
+            if name != keep:
+                backend.unload()
 
     def transcribe(
         self,
@@ -152,6 +172,7 @@ class Engine:
                 if choice.device.kind == "cpu":
                     raise
                 log.warning("%s on %s failed, retrying on CPU: %s", choice.backend, choice.device.name, e)
+                self.failed.add(choice.key)
                 fallback = self.cpu_choice(prefer_backend=choice.backend)
                 if fallback is None:
                     raise
@@ -165,6 +186,7 @@ class Engine:
         if spec is None:
             raise ModelMissing(choice.backend, model)
         backend = self.backends[choice.backend]
+        self._unload_others(choice.backend)
         backend.load(spec, choice.device)
         if cancel.is_set():
             raise Cancelled()

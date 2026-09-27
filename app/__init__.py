@@ -77,7 +77,9 @@ def create_app(
 
     bus = EventBus()
     models = models or ModelManager(paths.models)
-    engine = Engine(backends if backends is not None else installed_backends(), models, settings)
+    if backends is None:
+        backends = installed_backends(cache_dir=paths.root / "ov-cache")
+    engine = Engine(backends, models, settings)
     jobs = JobManager(engine, bus, paths.temp)
     guard = LaunchGuard(launch_token)
     dictation = DictationService(
@@ -101,8 +103,13 @@ def create_app(
 
     if start_worker:
         jobs.start()
-        # Probing devices imports the engines (slow); do it before the window asks.
-        threading.Thread(target=engine.choices, name="device-probe", daemon=True).start()
+        # Probe devices (imports the engines, slow) and load the model before the window
+        # or the first dictation needs them.
+        def warm_up() -> None:
+            engine.choices()
+            engine.preload(effective_model(engine, cpu_cores()))
+
+        threading.Thread(target=warm_up, name="engine-warmup", daemon=True).start()
     return app
 
 

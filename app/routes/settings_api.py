@@ -40,8 +40,26 @@ def _body() -> dict:
 def public_settings(svc) -> dict:
     s = asdict(svc.settings.get())
     out = {k: s[k] for k in EDITABLE}
-    out.update(hotkey=s["hotkey"], polish_hotkey=s["polish_hotkey"])
+    out.update(hotkey=s["hotkey"], polish_hotkey=s["polish_hotkey"], engine=engine_setting(s))
     return out
+
+
+def engine_setting(s: dict) -> str:
+    """"" = automatic, "cpu" = best CPU engine, else a choice key like "openvino|GPU"."""
+    if s["force_cpu"]:
+        return "cpu"
+    return f"{s['backend']}|{s['device']}" if s["backend"] else ""
+
+
+def _engine_changes(svc, value) -> tuple[dict | None, str | None]:
+    if value == "":
+        return {"force_cpu": False, "backend": "", "device": ""}, None
+    if value == "cpu":
+        return {"force_cpu": True, "backend": "", "device": ""}, None
+    if isinstance(value, str) and any(c.key == value for c in svc.engine.choices()):
+        backend, device = value.split("|", 1)
+        return {"force_cpu": False, "backend": backend, "device": device}, None
+    return None, "That engine isn't available on this computer"
 
 
 def _validate(svc, key: str, value):
@@ -85,6 +103,13 @@ def update_settings():
     svc = _svc()
     changes = {}
     for key, value in _body().items():
+        if key == "engine":
+            engine_changes, error = _engine_changes(svc, value)
+            if error:
+                return _error(error)
+            changes.update(engine_changes)
+            svc.engine.failed.clear()  # a deliberate choice gets a fresh try
+            continue
         clean, error = _validate(svc, key, value)
         if error:
             return _error(error)

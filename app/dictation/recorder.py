@@ -39,12 +39,24 @@ def list_microphones() -> list[str]:
         return []
 
 
+def write_wav(path: Path, samples: np.ndarray, rate: int) -> None:
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(np.ascontiguousarray(samples, dtype=np.int16).tobytes())
+
+
 class MicRecorder:
+    """Records into a growing buffer that can be read while recording continues,
+    so finished stretches of speech can be transcribed before you stop."""
+
     def __init__(self, max_seconds: float = 900):
         self.max_seconds = max_seconds
         self._stream = None
-        self._frames: list[np.ndarray] = []
-        self._rate = 16000
+        self._buf = np.zeros(0, np.int16)
+        self._len = 0
+        self.rate = 16000
         self._lock = threading.Lock()
         self.level = 0.0  # last input peak, 0..1, for the UI meter
 
@@ -52,9 +64,16 @@ class MicRecorder:
     def recording(self) -> bool:
         return self._stream is not None
 
-    def seconds(self) -> float:
+    def total(self) -> int:
         with self._lock:
-            return sum(len(f) for f in self._frames) / self._rate
+            return self._len
+
+    def seconds(self) -> float:
+        return self.total() / self.rate
+
+    def read(self, start: int, end: int) -> np.ndarray:
+        with self._lock:
+            return self._buf[start:min(end, self._len)].copy()
 
     def start(self, device_name: str = "") -> None:
         """Start recording from `device_name` ("" or not found = Windows default)."""
@@ -67,11 +86,13 @@ class MicRecorder:
             info = sd.query_devices(device if device is not None else sd.default.device[0])
         except Exception as e:
             raise RecorderError("No microphone was found") from e
-        self._rate = int(info.get("default_samplerate") or 16000)
-        self._frames = []
+        self.rate = int(info.get("default_samplerate") or 16000)
+        with self._lock:
+            self._buf = np.zeros(self.rate * 60, np.int16)  # grows as needed
+            self._len = 0
         try:
             self._stream = sd.InputStream(
-                device=device, samplerate=self._rate, channels=1, dtype="int16",
+                device=device, samplerate=self.rate, channels=1, dtype="int16",
                 callback=self._callback,
             )
             self._stream.start()
@@ -82,32 +103,34 @@ class MicRecorder:
             ) from e
 
     def _callback(self, indata, frames, time_info, status) -> None:
+        data = indata[:, 0]
         with self._lock:
-            if sum(len(f) for f in self._frames) / self._rate < self.max_seconds:
-                self._frames.append(indata.copy())
+            room = int(self.max_seconds * self.rate) - self._len
+            if room > 0:
+                data = data[:room]
+                need = self._len + len(data)
+                if need > len(self._buf):
+                    grown = np.zeros(max(need, len(self._buf) * 2), np.int16)
+                    grown[:self._len] = self._buf[:self._len]
+                    self._buf = grown
+                self._buf[self._len:need] = data
+                self._len = need
         self.level = float(np.abs(indata).max()) / 32768.0
 
-    def stop(self, dst: Path) -> float:
-        """Stop and write a WAV file. Returns the duration in seconds."""
+    def _close(self) -> None:
         stream, self._stream = self._stream, None
         if stream is not None:
             stream.stop()
             stream.close()
-        with self._lock:
-            audio = np.concatenate(self._frames) if self._frames else np.zeros((0, 1), np.int16)
-            self._frames = []
-        with wave.open(str(dst), "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(self._rate)
-            w.writeframes(audio.tobytes())
         self.level = 0.0
-        return len(audio) / self._rate
+
+    def stop(self) -> float:
+        """Stop recording; the audio stays readable until the next start. Returns seconds."""
+        self._close()
+        return self.seconds()
 
     def cancel(self) -> None:
-        stream, self._stream = self._stream, None
-        if stream is not None:
-            stream.stop()
-            stream.close()
+        self._close()
         with self._lock:
-            self._frames = []
+            self._buf = np.zeros(0, np.int16)
+            self._len = 0

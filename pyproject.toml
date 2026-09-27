@@ -17,7 +17,9 @@ dependencies = [
 [project.optional-dependencies]
 # Each machine installs only the engine(s) its hardware can use; see scripts/install.ps1.
 cpu = ["faster-whisper>=1.2"]
-nvidia = ["faster-whisper>=1.2"]
+# CTranslate2 4.x needs CUDA 12 cuBLAS and cuDNN 9 (about 1.3 GB, NVIDIA machines only).
+nvidia = ["faster-whisper>=1.2", "nvidia-cublas-cu12>=12.4,<13", "nvidia-cudnn-cu12>=9,<10"]
+intel = ["openvino-genai>=2026.4"]
 
 [dependency-groups]
 dev = ["pytest>=8"]
