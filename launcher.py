@@ -33,6 +33,9 @@ from app.config import APP_NAME, Paths, SettingsStore, data_dir  # noqa: E402
 from app.logging_setup import setup_logging  # noqa: E402
 from app.overlay import RecordingOverlay  # noqa: E402
 from app.tray import Tray  # noqa: E402
+from app.winshell import (  # noqa: E402
+    enable_dpi_awareness, register_app_id, set_window_icon, write_icon,
+)
 
 log = logging.getLogger("launcher")
 
@@ -59,7 +62,8 @@ class Launcher:
         self.window = None
         self.edge_mode = False
         self.tray = Tray(self.show, self.svc.dictation.toggle, self.request_quit)
-        self.overlay = RecordingOverlay()
+        self.overlay = RecordingOverlay(lambda: self.svc.settings.get().overlay_position)
+        self.icon_ico: Path | None = None
         self._told_about_tray = False
         self._last_error: str | None = None
 
@@ -104,12 +108,17 @@ class Launcher:
                 APP_NAME, self.url(self.first_token), width=1200, height=800, min_size=(420, 480)
             )
             self.window.events.closing += self._on_closing
+            self.window.events.shown += self._on_shown
             webview.start(private_mode=True)  # blocks until the window is destroyed
             return True
         except Exception:
             log.exception("pywebview failed to start")
             self.window = None
             return False
+
+    def _on_shown(self) -> None:
+        if self.icon_ico is not None:
+            set_window_icon(APP_NAME, self.icon_ico)
 
     def _on_closing(self):
         if self.quit.is_set() or self.tray.icon is None:
@@ -149,6 +158,11 @@ class Launcher:
         return True
 
     def run(self, force_edge: bool) -> None:
+        try:
+            self.icon_ico, icon_png = write_icon(self.paths.root / "icon")
+            register_app_id(icon_png)
+        except Exception:
+            log.exception("could not set up the app icon")
         self.tray.start()
         self.overlay.start()
         self.svc.dictation.listeners.append(self.on_dictation)
@@ -163,6 +177,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=APP_NAME)
     parser.add_argument("--edge", action="store_true", help="use Edge app mode instead of pywebview")
     args = parser.parse_args()
+    enable_dpi_awareness()  # before any window exists (Tk overlay, tray, WebView2)
 
     paths = Paths(data_dir())
     paths.ensure()

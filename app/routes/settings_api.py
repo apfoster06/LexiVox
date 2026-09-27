@@ -18,6 +18,7 @@ settings_api = Blueprint("settings_api", __name__, url_prefix="/api")
 EDITABLE = (
     "model", "language", "translate", "theme", "auto_paste", "remove_fillers", "vocabulary",
     "mic_device", "sounds", "max_record_minutes", "polish_style", "ollama_url", "ollama_model",
+    "overlay_position",
 )
 
 
@@ -55,6 +56,9 @@ def _validate(svc, key: str, value):
         return (value, None) if ok else (None, "Unknown language")
     if key == "theme":
         return (value, None) if value in ("system", "light", "dark") else (None, "Unknown theme")
+    if key == "overlay_position":
+        ok = value in ("bottom", "right", "off")
+        return (value, None) if ok else (None, "Unknown position")
     if key == "polish_style":
         return (value, None) if value in ollama.POLISH_STYLES else (None, "Unknown style")
     if key == "max_record_minutes":

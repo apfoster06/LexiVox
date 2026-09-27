@@ -179,6 +179,11 @@ legend { font-size: 15px; font-weight: 600; padding: 10px 0 6px; }
 .field > label { font-weight: 600; font-size: 13px; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .row-label { min-width: 150px; font-size: 14px; }
+.hk-row { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.hk-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.hk-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.hk-edit .plus { color: var(--muted); }
+.hk-edit select { min-width: 9em; }
 .row select { flex: 1; min-width: 0; }
 
 select, input[type="search"], input[type="number"], input[type="text"], textarea {

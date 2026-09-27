@@ -84,6 +84,7 @@ class Settings:
     vocabulary: str = ""  # names/jargon, one per line; passed to Whisper as a hint
     mic_device: str = ""  # "" = Windows default input
     sounds: bool = True
+    overlay_position: str = "bottom"  # recording pill: "bottom" | "right" | "off"
     max_record_minutes: int = 15
     benchmark: dict = field(default_factory=dict)
     first_run_done: bool = False

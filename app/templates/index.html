@@ -94,21 +94,11 @@
       <div class="panel settings">
         <fieldset>
           <legend>Shortcuts</legend>
-          <div class="row">
-            <span class="row-label">Dictate</span>
-            <kbd id="set-hk-dictate">–</kbd>
-            <button class="btn ghost small hk-change" data-mode="dictate" type="button">Change</button>
-            <button class="btn ghost small hk-off" data-mode="dictate" type="button">Turn off</button>
-          </div>
-          <div class="row">
-            <span class="row-label">Dictate + AI polish</span>
-            <kbd id="set-hk-polish">–</kbd>
-            <button class="btn ghost small hk-change" data-mode="polish" type="button">Change</button>
-            <button class="btn ghost small hk-off" data-mode="polish" type="button">Turn off</button>
-          </div>
-          <div id="hk-capture" class="hint" hidden>Press the new shortcut now (Esc to cancel)…</div>
+          <div class="hk-row" data-mode="dictate" data-label="Dictate"></div>
+          <div class="hk-row" data-mode="polish" data-label="Dictate + AI polish"></div>
           <div id="hk-error" class="hint error" hidden></div>
-          <p class="hint">Press once to start, again to stop. Modifier-only shortcuts like Ctrl+Win fire when you let go.</p>
+          <p class="hint">Tick the modifier keys and pick a key, then Save. Choose "None" as the key for a
+            modifier-only shortcut like Ctrl+Win: it fires when you let go. Press once to start, again to stop.</p>
         </fieldset>
 
         <fieldset>
@@ -121,6 +111,14 @@
             </div>
           </div>
           <label class="check"><input id="set-sounds" type="checkbox"> Beep when recording starts and stops</label>
+          <div class="field">
+            <label for="set-overlay">Recording indicator (shown while you dictate in other apps)</label>
+            <select id="set-overlay">
+              <option value="bottom">Above the taskbar</option>
+              <option value="right">Right edge (vertical)</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
           <div class="field inline">
             <label for="set-maxlen">Stop recording automatically after</label>
             <input id="set-maxlen" type="number" min="1" max="60" step="1"> <span class="hint">minutes</span>

@@ -201,6 +201,25 @@ def test_two_shortcuts_cannot_match(app, authed):
     assert (s.hotkey, s.polish_hotkey) == ("Ctrl+Win", "Ctrl+Alt+Win")
 
 
+def test_pill_placement():
+    from app.overlay import pill_rect
+
+    work = (0, 0, 1920, 1128)  # 1920x1200 screen with a 72 px taskbar
+    x, y, w, h = pill_rect("bottom", work, 1.5)
+    assert (w, h) == (315, 57) and x == (1920 - 315) // 2
+    assert y + h == 1128 - 24  # just above the taskbar
+    x, y, w, h = pill_rect("right", work, 1.5)
+    assert (w, h) == (57, 315) and x + w == 1920 - 24
+    assert y == (1128 - 315) // 2
+    x, y, w, h = pill_rect("bottom", (1920, 0, 3840, 1040), 1.0)  # second monitor
+    assert 1920 < x < 3840
+
+
+def test_overlay_position_setting(authed):
+    assert _post(authed, "/api/settings", {"overlay_position": "right"}).status_code == 200
+    assert _post(authed, "/api/settings", {"overlay_position": "middle"}).status_code == 400
+
+
 def test_microphones_endpoint(authed, monkeypatch):
     import app.routes.settings_api as sa
 

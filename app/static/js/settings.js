@@ -1,34 +1,59 @@
 // Settings tab: shortcuts, microphone, text options, vocabulary, AI polish, model, theme.
 "use strict";
 
-const hk = { capturing: null, mods: new Set() };
-
-const CODE_NAMES = {
-  Space: "Space", Enter: "Enter", Tab: "Tab", Insert: "Insert", Delete: "Delete", Home: "Home",
-  End: "End", PageUp: "PageUp", PageDown: "PageDown", Pause: "Pause", ArrowUp: "Up",
-  ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right", Backquote: "Backquote",
-  Minus: "Minus", Equal: "Equal", Comma: "Comma", Period: "Period", Slash: "Slash",
-  Semicolon: "Semicolon", Quote: "Quote", BracketLeft: "BracketLeft",
-  BracketRight: "BracketRight", Backslash: "Backslash",
-};
 const MOD_ORDER = ["Ctrl", "Alt", "Shift", "Win"];
+const KEY_OPTIONS = [
+  ["", "None (modifiers only)"],
+  ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((k) => [k, k]),
+  ..."0123456789".split("").map((k) => [k, k]),
+  ...Array.from({ length: 24 }, (_, i) => [`F${i + 1}`, `F${i + 1}`]),
+  ...["Space", "Enter", "Tab", "Insert", "Delete", "Home", "End", "PageUp", "PageDown", "Pause",
+      "Up", "Down", "Left", "Right"].map((k) => [k, k]),
+];
+const hkCurrent = { dictate: "", polish: "" };
 
-function keyName(code) {
-  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
-  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
-  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
-  return CODE_NAMES[code] || null;
+// Builds the tick boxes + key dropdown for one shortcut row.
+function buildShortcutRow(row) {
+  const mode = row.dataset.mode;
+  const current = el("kbd", { class: "hk-current", text: "–" });
+  const mods = MOD_ORDER.map((m) =>
+    el("label", { class: "check" }, el("input", { type: "checkbox", "data-mod": m }), ` ${m}`));
+  const key = el("select", { class: "hk-key", "aria-label": `${row.dataset.label} key` });
+  for (const [value, text] of KEY_OPTIONS) key.append(el("option", { value, text }));
+  const save = el("button", { class: "btn small", type: "button", text: "Save" });
+  const off = el("button", { class: "btn ghost small", type: "button", text: "Turn off" });
+  const edit = el("div", { class: "hk-edit" }, ...mods, el("span", { class: "plus", text: "+" }), key, save, off);
+  row.append(el("div", { class: "hk-head" }, el("span", { text: row.dataset.label }), current), edit);
+
+  const update = () => { save.disabled = pickerCombo(row) === hkCurrent[mode]; };
+  edit.addEventListener("change", update);
+  save.addEventListener("click", () => saveHotkey(mode, pickerCombo(row)));
+  off.addEventListener("click", () => saveHotkey(mode, ""));
 }
 
-function modsOf(e) {
-  return MOD_ORDER.filter((m) => ({ Ctrl: e.ctrlKey, Alt: e.altKey, Shift: e.shiftKey, Win: e.metaKey })[m]);
+function pickerCombo(row) {
+  const mods = [...row.querySelectorAll("input[data-mod]")].filter((b) => b.checked).map((b) => b.dataset.mod);
+  const key = row.querySelector(".hk-key").value;
+  return [...mods, ...(key ? [key] : [])].join("+");
+}
+
+function setPicker(mode, combo) {
+  hkCurrent[mode] = combo || "";
+  const row = document.querySelector(`.hk-row[data-mode="${mode}"]`);
+  if (!row) return;
+  const parts = (combo || "").split("+").filter(Boolean);
+  const key = parts.length && !MOD_ORDER.includes(parts[parts.length - 1]) ? parts[parts.length - 1] : "";
+  for (const box of row.querySelectorAll("input[data-mod]")) box.checked = parts.includes(box.dataset.mod);
+  row.querySelector(".hk-key").value = key;
+  row.querySelector(".hk-current").textContent = combo || "Off";
+  row.querySelector(".btn.small:not(.ghost)").disabled = true;
 }
 
 // ---- rendering --------------------------------------------------------------------
 
 function renderShortcuts(d) {
-  $("set-hk-dictate").textContent = d.hotkey || "Off";
-  $("set-hk-polish").textContent = d.polish_hotkey || "Off";
+  setPicker("dictate", d.hotkey);
+  setPicker("polish", d.polish_hotkey);
   const errors = Object.values(d.hotkey_errors || {});
   $("hk-error").textContent = errors.join(" ");
   $("hk-error").hidden = !errors.length;
@@ -38,6 +63,7 @@ function renderSettings(s) {
   const st = s.settings;
   renderShortcuts({ ...s.dictation, hotkey: st.hotkey, polish_hotkey: st.polish_hotkey });
   $("set-sounds").checked = st.sounds;
+  $("set-overlay").value = st.overlay_position;
   $("set-maxlen").value = st.max_record_minutes;
   $("set-auto-paste").checked = st.auto_paste;
   $("set-fillers").checked = st.remove_fillers;
@@ -151,7 +177,7 @@ async function loadOllama() {
   sel.value = o.models.includes(o.selected) ? o.selected : "";
 }
 
-// ---- shortcut capture -------------------------------------------------------------
+// ---- shortcuts --------------------------------------------------------------------
 
 async function saveHotkey(mode, combo) {
   $("hk-error").hidden = true;
@@ -163,56 +189,14 @@ async function saveHotkey(mode, combo) {
   }
 }
 
-function stopCapture() {
-  hk.capturing = null;
-  hk.mods = new Set();
-  $("hk-capture").hidden = true;
-  for (const b of document.querySelectorAll(".hk-change")) b.textContent = "Change";
-}
-
-function wireShortcuts() {
-  for (const b of document.querySelectorAll(".hk-change")) {
-    b.addEventListener("click", () => {
-      const was = hk.capturing;
-      stopCapture();
-      if (was === b.dataset.mode) return;
-      hk.capturing = b.dataset.mode;
-      b.textContent = "Cancel";
-      $("hk-capture").hidden = false;
-    });
-  }
-  for (const b of document.querySelectorAll(".hk-off")) {
-    b.addEventListener("click", () => saveHotkey(b.dataset.mode, ""));
-  }
-  window.addEventListener("keydown", (e) => {
-    if (!hk.capturing) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key === "Escape") { stopCapture(); return; }
-    const key = keyName(e.code);
-    if (!key) { modsOf(e).forEach((m) => hk.mods.add(m)); return; }
-    const mode = hk.capturing;
-    stopCapture();
-    saveHotkey(mode, [...modsOf(e), key].join("+"));
-  }, true);
-  // Modifier-only chords (e.g. Ctrl+Win) are saved when the keys are released.
-  window.addEventListener("keyup", (e) => {
-    if (!hk.capturing || !hk.mods.size) return;
-    e.preventDefault();
-    const combo = MOD_ORDER.filter((m) => hk.mods.has(m));
-    const mode = hk.capturing;
-    hk.mods = new Set();
-    if (combo.length >= 2) { stopCapture(); saveHotkey(mode, combo.join("+")); }
-  }, true);
-}
-
 // ---- wiring -----------------------------------------------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
-  wireShortcuts();
+  document.querySelectorAll(".hk-row").forEach(buildShortcutRow);
   const bind = (id, key, read = (t) => t.checked) =>
     $(id).addEventListener("change", (e) => saveSetting({ [key]: read(e.target) }));
   bind("set-sounds", "sounds");
+  bind("set-overlay", "overlay_position", (t) => t.value);
   bind("set-auto-paste", "auto_paste");
   bind("set-fillers", "remove_fillers");
   bind("set-style", "polish_style", (t) => t.value);
