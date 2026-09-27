@@ -46,6 +46,7 @@ class DictationService:
         model_for: Callable[[], str],
         recorder: MicRecorder | None = None,
         copy: Callable[[str], None] | None = None,
+        paste: Callable[[], bool] | None = None,
         beeps: bool = True,
     ):
         self.engine = engine
@@ -57,6 +58,9 @@ class DictationService:
         if copy is None:
             from .clipboard import copy_text as copy
         self.copy = copy
+        if paste is None:
+            from .paste import paste
+        self.paste = paste
         self.beeps = beeps
         self.state = "idle"  # idle | recording | transcribing
         self.error: str | None = None
@@ -162,8 +166,16 @@ class DictationService:
             if not text:
                 raise _Soft("No speech was heard.")
             self.copy(text)
-            self.history.appendleft({"text": text, "seconds": round(seconds, 1), "created": time.time()})
-            log.info("dictation: %.1fs transcribed on %s and copied", seconds, choice.key)
+            pasted = False
+            if self.settings.get().auto_paste:
+                try:
+                    pasted = self.paste()
+                except Exception:
+                    log.exception("auto-paste failed")
+            self.history.appendleft({
+                "text": text, "seconds": round(seconds, 1), "created": time.time(), "pasted": pasted,
+            })
+            log.info("dictation: %.1fs transcribed on %s, copied, pasted=%s", seconds, choice.key, pasted)
         except Cancelled:
             pass
         except (_Soft, ModelMissing, RecorderError, audio.AudioError) as e:
@@ -189,6 +201,7 @@ class DictationService:
         if not light:
             snap.update(
                 hotkey=self.settings.get().hotkey,
+                auto_paste=self.settings.get().auto_paste,
                 hotkey_error=self.hotkey_error,
                 error=self.error,
                 history=list(self.history)[:10],

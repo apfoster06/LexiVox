@@ -36,11 +36,12 @@
           <button id="hotkey-change" class="btn ghost small" type="button">Change</button>
           <button id="hotkey-off" class="btn ghost small" type="button">Turn off</button>
         </div>
+        <label class="check"><input id="auto-paste" type="checkbox"> Paste automatically where the cursor is</label>
         <div id="hotkey-capture" class="hint" hidden>Press the new shortcut now (Esc to cancel)…</div>
         <div id="dict-error" class="hint error" hidden></div>
         <div id="dict-last" class="dict-last" hidden>
           <div class="dict-last-head">
-            <span class="hint">Last dictation (copied to clipboard)</span>
+            <span id="dict-last-label" class="hint">Last dictation (copied to clipboard)</span>
             <button id="dict-copy" class="btn ghost small" type="button">Copy again</button>
           </div>
           <p id="dict-last-text"></p>

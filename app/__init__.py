@@ -61,6 +61,7 @@ def create_app(
     start_worker: bool = True,
     recorder=None,
     copy=None,
+    paste=None,
 ) -> Flask:
     paths.ensure()
     clean_temp(paths)
@@ -80,7 +81,7 @@ def create_app(
     guard = LaunchGuard(launch_token)
     dictation = DictationService(
         engine, settings, bus, paths.temp, lambda: effective_model(engine, cpu_cores()),
-        recorder=recorder, copy=copy,
+        recorder=recorder, copy=copy, paste=paste,
     )
     services = Services(
         paths, settings, guard, bus, models, DownloadService(models, bus), engine, jobs, dictation

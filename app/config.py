@@ -77,6 +77,7 @@ class Settings:
     max_upload_mb: int = 4096
     theme: str = "system"
     hotkey: str = "Ctrl+Alt+Space"  # dictation toggle; "" = off
+    auto_paste: bool = True  # after copying, press Ctrl+V in the focused window
     benchmark: dict = field(default_factory=dict)
     first_run_done: bool = False
 

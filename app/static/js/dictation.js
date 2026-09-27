@@ -46,10 +46,14 @@ function renderDictation(snap) {
   err.textContent = message || "";
   err.hidden = !message;
 
+  if (s.auto_paste !== undefined) $("auto-paste").checked = s.auto_paste;
+
   if (s.history) {
     const last = s.history[0];
     $("dict-last").hidden = !last;
     $("dict-last-text").textContent = last ? last.text : "";
+    $("dict-last-label").textContent = last && last.pasted
+      ? "Last dictation (pasted and copied)" : "Last dictation (copied to clipboard)";
   }
 }
 
@@ -75,6 +79,8 @@ function wireDictation() {
     setTimeout(() => { $("dict-copy").textContent = "Copy again"; }, 1200);
   });
   $("hotkey-off").addEventListener("click", () => saveHotkey(""));
+  $("auto-paste").addEventListener("change", () =>
+    api("/api/settings", { method: "POST", json: { auto_paste: $("auto-paste").checked } }).catch(console.error));
   $("hotkey-change").addEventListener("click", () => {
     if (dict.capturing) { stopCapture(); return; }
     dict.capturing = true;

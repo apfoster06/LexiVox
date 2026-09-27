@@ -59,7 +59,6 @@ class Launcher:
         self.edge_mode = False
         self.tray = Tray(self.show, self.svc.dictation.toggle, self.request_quit)
         self._told_about_tray = False
-        self._last_state = "idle"
         self._last_error: str | None = None
 
     def url(self, token: str) -> str:
@@ -81,14 +80,10 @@ class Launcher:
 
     def on_dictation(self, snap: dict) -> None:
         self.tray.update(snap)
-        state, previous = snap["state"], self._last_state
-        self._last_state = state
+        # Success is silent (the text is pasted or on the clipboard); only problems pop up.
         error = snap.get("error")
         if error and error != self._last_error:
             self.tray.notify(error)
-        elif previous == "transcribing" and state == "idle" and not error and snap.get("history"):
-            text = snap["history"][0]["text"]
-            self.tray.notify("Copied to clipboard: " + (text[:90] + "…" if len(text) > 90 else text))
         self._last_error = error
 
     # ---- windows ------------------------------------------------------------------

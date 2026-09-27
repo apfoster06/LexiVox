@@ -127,11 +127,17 @@ def clipboard() -> list[str]:
 
 
 @pytest.fixture
-def app(paths, settings, fake_backend, fake_recorder, clipboard):
+def pastes() -> list[int]:
+    return []
+
+
+@pytest.fixture
+def app(paths, settings, fake_backend, fake_recorder, clipboard, pastes):
     models = ModelManager(paths.models, load_catalog())
     application = create_app(
         paths, settings, TOKEN, port=PORT, backends={"faster-whisper": fake_backend},
         models=models, start_worker=True, recorder=fake_recorder, copy=clipboard.append,
+        paste=lambda: pastes.append(1) or True,
     )
     application.extensions["cvw"].dictation.beeps = False
     yield application

@@ -116,6 +116,27 @@ def test_toggle_records_transcribes_and_copies(app, authed, fake_recorder, clipb
 
 
 @needs_ffmpeg
+def test_auto_paste_follows_setting(app, authed, fake_recorder, clipboard, pastes, sine_wav):
+    install_fake_model(services(app).models, "faster-whisper", "base")
+    services(app).settings.update(model="base")
+    fake_recorder.source = sine_wav
+    dictation = services(app).dictation
+
+    def dictate():
+        _post(authed, "/api/dictation/toggle")
+        _post(authed, "/api/dictation/toggle")
+        assert wait_for(lambda: dictation.state == "idle")
+
+    dictate()
+    assert pastes == [1] and dictation.history[0]["pasted"] is True
+    assert _post(authed, "/api/settings", {"auto_paste": False}).status_code == 200
+    dictate()
+    assert pastes == [1] and dictation.history[0]["pasted"] is False
+    assert clipboard == ["hello world", "hello world"]  # always copied either way
+    assert _post(authed, "/api/settings", {"auto_paste": "yes"}).status_code == 400
+
+
+@needs_ffmpeg
 def test_copy_again(app, authed, fake_recorder, clipboard, sine_wav):
     assert _post(authed, "/api/dictation/copy").status_code == 404
     install_fake_model(services(app).models, "faster-whisper", "base")

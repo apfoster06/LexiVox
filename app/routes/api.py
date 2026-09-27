@@ -107,11 +107,17 @@ def update_settings():
         if not isinstance(body["translate"], bool):
             return _error("translate must be true or false")
         changes["translate"] = body["translate"]
+    if "auto_paste" in body:
+        if not isinstance(body["auto_paste"], bool):
+            return _error("auto_paste must be true or false")
+        changes["auto_paste"] = body["auto_paste"]
     if "theme" in body:
         if body["theme"] not in ("system", "light", "dark"):
             return _error("Unknown theme")
         changes["theme"] = body["theme"]
     svc.settings.update(**changes)
+    if "auto_paste" in changes:
+        svc.dictation._publish()
     return jsonify(ok=True)
 
 
