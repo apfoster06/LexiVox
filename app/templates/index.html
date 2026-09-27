@@ -7,97 +7,190 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/dictation.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/files.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/settings.js') }}" defer></script>
 </head>
 <body>
   <header class="topbar">
     <h1 class="brand">{{ app_name }}</h1>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab-btn" role="tab" id="tabbtn-dictation" aria-controls="tab-dictation" data-tab="dictation" type="button">Dictation</button>
+      <button class="tab-btn" role="tab" id="tabbtn-files" aria-controls="tab-files" data-tab="files" type="button">Files</button>
+      <button class="tab-btn" role="tab" id="tabbtn-settings" aria-controls="tab-settings" data-tab="settings" type="button">Settings</button>
+    </nav>
     <span id="engine-badge" class="badge" title="Engine in use"></span>
-    <div class="topbar-actions">
-      <button id="theme-toggle" class="btn ghost" type="button" aria-label="Change theme">Theme: system</button>
-    </div>
   </header>
 
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
 
-  <main class="layout">
-    <section class="panel left" aria-labelledby="new-heading">
-      <div class="dictation" aria-labelledby="dictation-heading">
-        <h2 id="dictation-heading" class="panel-title">Dictation</h2>
-        <div class="dict-row">
-          <button id="dict-btn" class="btn dict-btn" type="button">Start dictation</button>
-          <div class="dict-status">
-            <div id="dict-status" aria-live="polite">Ready</div>
-            <progress id="dict-level" max="1" value="0" hidden aria-label="Microphone level"></progress>
-          </div>
+  <main>
+    <!-- Dictation (main screen) -->
+    <section id="tab-dictation" class="tab-panel dictation-tab" role="tabpanel" aria-labelledby="tabbtn-dictation">
+      <div class="panel hero">
+        <button id="dict-btn" class="mic-btn" type="button" aria-label="Start dictation">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="mic-icon">
+            <rect x="9" y="3" width="6" height="11" rx="3"></rect>
+            <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"></path>
+          </svg>
+        </button>
+        <div id="dict-status" class="dict-status" aria-live="polite">Ready</div>
+        <progress id="dict-level" max="1" value="0" hidden aria-label="Microphone level"></progress>
+        <div class="hints">
+          <span><kbd id="hk-dictate">–</kbd> dictate</span>
+          <span id="hk-polish-wrap"><kbd id="hk-polish">–</kbd> dictate + AI polish</span>
         </div>
-        <div class="dict-hotkey">
-          <span class="hint">Shortcut:</span>
-          <kbd id="hotkey-display">–</kbd>
-          <button id="hotkey-change" class="btn ghost small" type="button">Change</button>
-          <button id="hotkey-off" class="btn ghost small" type="button">Turn off</button>
-        </div>
-        <label class="check"><input id="auto-paste" type="checkbox"> Paste automatically where the cursor is</label>
-        <div id="hotkey-capture" class="hint" hidden>Press the new shortcut now (Esc to cancel)…</div>
         <div id="dict-error" class="hint error" hidden></div>
-        <div id="dict-last" class="dict-last" hidden>
-          <div class="dict-last-head">
-            <span id="dict-last-label" class="hint">Last dictation (copied to clipboard)</span>
-            <button id="dict-copy" class="btn ghost small" type="button">Copy again</button>
-          </div>
-          <p id="dict-last-text"></p>
+        <div class="quick">
+          <label class="check"><input id="q-auto-paste" type="checkbox"> Paste where the cursor is</label>
+          <label class="check"><input id="q-fillers" type="checkbox"> Remove filler words</label>
+          <label class="check">AI polish style
+            <select id="q-style" aria-label="AI polish style">
+              <option value="clean">Clean up</option>
+              <option value="email">Email</option>
+              <option value="bullets">Bullet points</option>
+            </select>
+          </label>
         </div>
       </div>
 
-      <h2 id="new-heading" class="panel-title">Transcribe files</h2>
-
-      <label id="dropzone" class="dropzone" for="file-input">
-        <input id="file-input" type="file" multiple class="visually-hidden"
-               accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4,.mkv,.mov,.avi,.webm">
-        <span class="dz-title">Drop audio or video files here</span>
-        <span class="dz-sub">or click to choose files</span>
-      </label>
-
-      <div class="options">
-        <div class="field">
-          <label for="model-select">Model</label>
-          <select id="model-select"><option>Detecting hardware…</option></select>
-          <div id="model-status" class="hint"></div>
-          <div id="download-row" class="download-row" hidden>
-            <button id="download-btn" class="btn" type="button">Download model</button>
-            <button id="download-cancel" class="btn ghost" type="button" hidden>Cancel</button>
-            <progress id="download-progress" max="1" value="0" hidden></progress>
-            <span id="download-text" class="hint"></span>
-          </div>
-        </div>
-        <div class="field">
-          <label for="language-select">Language</label>
-          <select id="language-select"></select>
-        </div>
-        <label class="check">
-          <input id="translate-check" type="checkbox"> Translate to English
-        </label>
+      <div class="panel recent">
+        <h2 class="panel-title">Recent dictations</h2>
+        <ul id="dict-history" class="history"></ul>
+        <p id="dict-empty" class="hint">Nothing yet. Your last 20 dictations show here until you quit the app.</p>
       </div>
-
-      <div id="upload-status" class="hint" aria-live="polite"></div>
-
-      <h2 class="panel-title">Queue</h2>
-      <ul id="queue" class="queue" aria-label="Transcription queue"></ul>
-      <p id="queue-empty" class="hint">No files yet.</p>
     </section>
 
-    <section class="panel right" aria-labelledby="transcript-heading">
-      <div class="transcript-head">
-        <h2 id="transcript-heading" class="panel-title">Transcript</h2>
-        <div class="toolbar">
-          <input id="search" type="search" placeholder="Search transcript" aria-label="Search transcript">
-          <label class="check"><input id="ts-toggle" type="checkbox" checked> Timestamps</label>
-          <button id="copy-btn" class="btn ghost" type="button">Copy</button>
-        </div>
+    <!-- Files (secondary) -->
+    <section id="tab-files" class="tab-panel files-tab" role="tabpanel" aria-labelledby="tabbtn-files" hidden>
+      <div class="panel files-left">
+        <label id="dropzone" class="dropzone" for="file-input">
+          <input id="file-input" type="file" multiple class="visually-hidden"
+                 accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4,.mkv,.mov,.avi,.webm">
+          <span class="dz-title">Drop audio or video files</span>
+          <span class="dz-sub">or click to choose</span>
+        </label>
+        <div id="files-model" class="hint"></div>
+        <div id="upload-status" class="hint" aria-live="polite"></div>
+        <h2 class="panel-title">Queue</h2>
+        <ul id="queue" class="queue" aria-label="Transcription queue"></ul>
+        <p id="queue-empty" class="hint">No files yet.</p>
       </div>
-      <div id="transcript-meta" class="hint"></div>
-      <progress id="job-progress" max="1" value="0" hidden></progress>
-      <div id="transcript" class="transcript" tabindex="0" aria-live="polite">
-        <p class="hint">Pick a file in the queue to see its transcript.</p>
+      <div class="panel files-right">
+        <div class="transcript-head">
+          <div id="transcript-meta" class="hint">Pick a file in the queue.</div>
+          <div class="toolbar">
+            <input id="search" type="search" placeholder="Search" aria-label="Search transcript">
+            <label class="check"><input id="ts-toggle" type="checkbox" checked> Times</label>
+            <button id="copy-btn" class="btn ghost small" type="button">Copy</button>
+          </div>
+        </div>
+        <progress id="job-progress" max="1" value="0" hidden></progress>
+        <div id="transcript" class="transcript" tabindex="0" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="tab-settings" class="tab-panel settings-tab" role="tabpanel" aria-labelledby="tabbtn-settings" hidden>
+      <div class="panel settings">
+        <fieldset>
+          <legend>Shortcuts</legend>
+          <div class="row">
+            <span class="row-label">Dictate</span>
+            <kbd id="set-hk-dictate">–</kbd>
+            <button class="btn ghost small hk-change" data-mode="dictate" type="button">Change</button>
+            <button class="btn ghost small hk-off" data-mode="dictate" type="button">Turn off</button>
+          </div>
+          <div class="row">
+            <span class="row-label">Dictate + AI polish</span>
+            <kbd id="set-hk-polish">–</kbd>
+            <button class="btn ghost small hk-change" data-mode="polish" type="button">Change</button>
+            <button class="btn ghost small hk-off" data-mode="polish" type="button">Turn off</button>
+          </div>
+          <div id="hk-capture" class="hint" hidden>Press the new shortcut now (Esc to cancel)…</div>
+          <div id="hk-error" class="hint error" hidden></div>
+          <p class="hint">Press once to start, again to stop. Modifier-only shortcuts like Ctrl+Win fire when you let go.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Microphone &amp; recording</legend>
+          <div class="field">
+            <label for="set-mic">Microphone</label>
+            <div class="row">
+              <select id="set-mic"></select>
+              <button id="mic-refresh" class="btn ghost small" type="button">Refresh</button>
+            </div>
+          </div>
+          <label class="check"><input id="set-sounds" type="checkbox"> Beep when recording starts and stops</label>
+          <div class="field inline">
+            <label for="set-maxlen">Stop recording automatically after</label>
+            <input id="set-maxlen" type="number" min="1" max="60" step="1"> <span class="hint">minutes</span>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Text</legend>
+          <label class="check"><input id="set-auto-paste" type="checkbox"> Paste automatically where the cursor is (always copied too)</label>
+          <label class="check"><input id="set-fillers" type="checkbox"> Remove filler words (um, uh, erm…)</label>
+          <div class="field">
+            <label for="set-vocab">Custom vocabulary</label>
+            <textarea id="set-vocab" rows="4" placeholder="One per line, e.g.&#10;Crowe&#10;EBITDA&#10;Jane Okafor"></textarea>
+            <div class="row">
+              <button id="vocab-save" class="btn small" type="button">Save vocabulary</button>
+              <span id="vocab-status" class="hint"></span>
+            </div>
+            <p class="hint">Names and jargon Whisper should spell your way. Used for dictation and files.</p>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>AI polish (local Ollama)</legend>
+          <div id="ollama-status" class="hint">Checking Ollama…</div>
+          <div class="field">
+            <label for="set-ollama-model">Model</label>
+            <select id="set-ollama-model"></select>
+          </div>
+          <div class="field">
+            <label for="set-style">Style</label>
+            <select id="set-style">
+              <option value="clean">Clean up (grammar and punctuation)</option>
+              <option value="email">Email</option>
+              <option value="bullets">Bullet points</option>
+            </select>
+          </div>
+          <p class="hint">Runs on this computer only. If Ollama isn't running, the text is pasted as spoken.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Speech recognition</legend>
+          <div class="field">
+            <label for="model-select">Model</label>
+            <select id="model-select"><option>Detecting hardware…</option></select>
+            <div id="model-status" class="hint"></div>
+            <div id="download-row" class="download-row" hidden>
+              <button id="download-btn" class="btn small" type="button">Download model</button>
+              <button id="download-cancel" class="btn ghost small" type="button" hidden>Cancel</button>
+              <progress id="download-progress" max="1" value="0" hidden></progress>
+              <span id="download-text" class="hint"></span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="language-select">Language</label>
+            <select id="language-select"></select>
+          </div>
+          <label class="check"><input id="translate-check" type="checkbox"> Translate to English</label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Appearance</legend>
+          <div class="field">
+            <label for="set-theme">Theme</label>
+            <select id="set-theme">
+              <option value="system">Match Windows</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
+        </fieldset>
       </div>
     </section>
   </main>

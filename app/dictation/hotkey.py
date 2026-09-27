@@ -155,12 +155,15 @@ class ModifierChord:
 
 
 class HotkeyListener:
-    def __init__(self, on_press: Callable[[], None]):
-        self._on_press = on_press
+    """Owns all global shortcuts. `actions` maps a binding name to its callback, e.g.
+    {"dictate": ..., "polish": ...}. A plain callable means a single "dictate" binding."""
+
+    def __init__(self, actions: dict[str, Callable[[], None]] | Callable[[], None]):
+        self._actions = actions if isinstance(actions, dict) else {"dictate": actions}
         self._thread: threading.Thread | None = None
         self._tid = 0
         self._ready = threading.Event()
-        self._request: tuple[str, threading.Event, list] | None = None
+        self._request: tuple[str, str, threading.Event, list] | None = None
         self._lock = threading.Lock()
 
     def start(self) -> None:
@@ -169,13 +172,15 @@ class HotkeyListener:
             self._thread.start()
             self._ready.wait(5)
 
-    def set(self, combo: str) -> None:
-        """Register `combo` ("" to unregister). Raises HotkeyError if Windows refuses it."""
+    def set(self, combo: str, name: str = "dictate") -> None:
+        """Bind `combo` to action `name` ("" to unbind). Raises HotkeyError if refused."""
+        if name not in self._actions:
+            raise HotkeyError(f"unknown action {name!r}")
         if combo:
             parse_hotkey(combo)  # validate before touching the current registration
         done, result = threading.Event(), []
         with self._lock:
-            self._request = (combo, done, result)
+            self._request = (name, combo, done, result)
             ctypes.windll.user32.PostThreadMessageW(self._tid, WM_APP, 0, 0)
             if not done.wait(5):
                 raise HotkeyError("The hotkey listener didn't respond")
@@ -205,69 +210,91 @@ class HotkeyListener:
         user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 0)  # create the message queue
         self._ready.set()
 
-        registered = False
+        names = list(self._actions)
+        ids = {name: i + 1 for i, name in enumerate(names)}  # RegisterHotKey ids
+        combos: dict[str, str] = {}
+        registered: set[str] = set()
+        chords: dict[str, ModifierChord] = {}
         hook = None
-        chord: ModifierChord | None = None
 
         def mask() -> None:
             user32.keybd_event(MASK_KEY, 0, 0, 0)
             user32.keybd_event(MASK_KEY, 0, 2, 0)
 
+        def is_pressed(vk: int) -> bool:
+            return bool(user32.GetAsyncKeyState(vk) & 0x8000)
+
         def on_hook(n_code, w_param, l_param):
-            if n_code == 0 and chord is not None:
+            if n_code == 0 and chords:
                 kb = ctypes.cast(l_param, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
-                try:
-                    chord.on_key(kb.vkCode, w_param in (WM_KEYDOWN, WM_SYSKEYDOWN))
-                except Exception:
-                    log.exception("keyboard hook failed")
+                is_down = w_param in (WM_KEYDOWN, WM_SYSKEYDOWN)
+                for chord in list(chords.values()):
+                    try:
+                        chord.on_key(kb.vkCode, is_down)
+                    except Exception:
+                        log.exception("keyboard hook failed")
             return user32.CallNextHookEx(None, n_code, w_param, l_param)
 
         hook_proc = hookproc_t(on_hook)  # keep a reference so it isn't garbage collected
 
-        def fire_async() -> None:
-            threading.Thread(target=self._fire, daemon=True).start()
+        def fire_async(name: str) -> Callable[[], None]:
+            return lambda: threading.Thread(target=self._fire, args=(name,), daemon=True).start()
 
-        def clear() -> None:
-            nonlocal registered, hook, chord
-            if registered:
-                user32.UnregisterHotKey(None, HOTKEY_ID)
-                registered = False
-            if hook:
+        def unbind(name: str) -> None:
+            if name in registered:
+                user32.UnregisterHotKey(None, ids[name])
+                registered.discard(name)
+            chords.pop(name, None)
+            combos.pop(name, None)
+
+        def sync_hook() -> bool:
+            nonlocal hook
+            if chords and not hook:
+                hook = user32.SetWindowsHookExW(
+                    WH_KEYBOARD_LL, hook_proc, kernel32.GetModuleHandleW(None), 0
+                )
+                return bool(hook)
+            if not chords and hook:
                 user32.UnhookWindowsHookEx(hook)
                 hook = None
-            chord = None
+            return True
+
+        def bind(name: str, combo: str) -> str | None:
+            unbind(name)
+            if not combo:
+                sync_hook()
+                return None
+            mods, vk, normalized = parse_hotkey(combo)
+            if any(parse_hotkey(c)[2] == normalized for c in combos.values()):
+                return f"{normalized} is already used for the other dictation shortcut."
+            if vk == 0:
+                chords[name] = ModifierChord(mods, fire_async(name), mask, is_pressed)
+                if not sync_hook():
+                    chords.pop(name, None)
+                    return "Windows refused the keyboard hook for that shortcut."
+            elif user32.RegisterHotKey(None, ids[name], mods | MOD_NOREPEAT, vk):
+                registered.add(name)
+            else:
+                return f"{combo} is already used by another app. Pick a different shortcut."
+            combos[name] = combo
+            return None
 
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-            if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
-                fire_async()
+            if msg.message == WM_HOTKEY:
+                name = next((n for n, i in ids.items() if i == msg.wParam), None)
+                if name in registered:
+                    fire_async(name)()
             elif msg.message == WM_APP and self._request:
-                combo, done, result = self._request
+                name, combo, done, result = self._request
                 self._request = None
-                clear()
-                error = None
-                if combo:
-                    mods, vk, _ = parse_hotkey(combo)
-                    if vk == 0:
-                        chord = ModifierChord(
-                            mods, fire_async, mask,
-                            lambda k: bool(user32.GetAsyncKeyState(k) & 0x8000),
-                        )
-                        hook = user32.SetWindowsHookExW(
-                            WH_KEYBOARD_LL, hook_proc, kernel32.GetModuleHandleW(None), 0
-                        )
-                        if not hook:
-                            chord = None
-                            error = "Windows refused the keyboard hook for that shortcut."
-                    elif user32.RegisterHotKey(None, HOTKEY_ID, mods | MOD_NOREPEAT, vk):
-                        registered = True
-                    else:
-                        error = f"{combo} is already used by another app. Pick a different shortcut."
-                result.append(error)
+                result.append(bind(name, combo))
                 done.set()
-        clear()
+        for name in list(combos):
+            unbind(name)
+        sync_hook()
 
-    def _fire(self) -> None:
+    def _fire(self, name: str) -> None:
         try:
-            self._on_press()
+            self._actions[name]()
         except Exception:
             log.exception("hotkey handler failed")

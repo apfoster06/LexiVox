@@ -77,7 +77,14 @@ class Settings:
     max_upload_mb: int = 4096
     theme: str = "system"
     hotkey: str = "Ctrl+Alt+Space"  # dictation toggle; "" = off
+    polish_hotkey: str = "Ctrl+Alt+Win"  # dictate, then clean up with Ollama; "" = off
+    polish_style: str = "clean"
     auto_paste: bool = True  # after copying, press Ctrl+V in the focused window
+    remove_fillers: bool = True
+    vocabulary: str = ""  # names/jargon, one per line; passed to Whisper as a hint
+    mic_device: str = ""  # "" = Windows default input
+    sounds: bool = True
+    max_record_minutes: int = 15
     benchmark: dict = field(default_factory=dict)
     first_run_done: bool = False
 

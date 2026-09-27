@@ -13,12 +13,13 @@ from .. import audio, services
 from ..backends.base import TranscribeOptions
 from ..backends.hardware import cpu_cores, cpu_name
 from ..config import APP_NAME
-from ..dictation.hotkey import HotkeyError
 from ..engine import effective_model as _effective_model
 from ..engine import recommended_model
 from ..events import sse_format
 from ..languages import LANGUAGES
 from ..models.manager import ModelError
+from ..textproc import vocabulary_prompt
+from .settings_api import public_settings
 
 log = logging.getLogger(__name__)
 api = Blueprint("api", __name__, url_prefix="/api")
@@ -76,7 +77,7 @@ def state():
     model = effective_model(svc)
     return jsonify(
         app={"name": APP_NAME},
-        settings={"model": s.model, "language": s.language, "translate": s.translate, "theme": s.theme},
+        settings=public_settings(svc),
         effective_model=model,
         recommended_model=recommended_model(choice, cpu_cores()),
         choice=choice.to_dict() if choice else None,
@@ -88,37 +89,6 @@ def state():
         languages=LANGUAGES,
         dictation=svc.dictation.snapshot(),
     )
-
-
-@api.post("/settings")
-def update_settings():
-    svc = _svc()
-    body = _json_body()
-    changes = {}
-    if "model" in body:
-        if body["model"] != "" and body["model"] not in svc.models.catalog:
-            return _error("Unknown model")
-        changes["model"] = body["model"]
-    if "language" in body:
-        if body["language"] != "auto" and body["language"] not in LANGUAGES:
-            return _error("Unknown language")
-        changes["language"] = body["language"]
-    if "translate" in body:
-        if not isinstance(body["translate"], bool):
-            return _error("translate must be true or false")
-        changes["translate"] = body["translate"]
-    if "auto_paste" in body:
-        if not isinstance(body["auto_paste"], bool):
-            return _error("auto_paste must be true or false")
-        changes["auto_paste"] = body["auto_paste"]
-    if "theme" in body:
-        if body["theme"] not in ("system", "light", "dark"):
-            return _error("Unknown theme")
-        changes["theme"] = body["theme"]
-    svc.settings.update(**changes)
-    if "auto_paste" in changes:
-        svc.dictation._publish()
-    return jsonify(ok=True)
 
 
 # ---- jobs -------------------------------------------------------------------------
@@ -137,7 +107,10 @@ def create_jobs():
     if language != "auto" and language not in LANGUAGES:
         return _error("Unknown language")
     translate = request.form.get("translate", str(s.translate)).lower() in ("1", "true", "on")
-    opts = TranscribeOptions(language=None if language == "auto" else language, translate=translate)
+    opts = TranscribeOptions(
+        language=None if language == "auto" else language, translate=translate,
+        prompt=vocabulary_prompt(s.vocabulary),
+    )
 
     created, rejected = [], []
     for f in files:
@@ -180,44 +153,6 @@ def cancel_job(job_id: str):
 @api.delete("/jobs/<job_id>")
 def remove_job(job_id: str):
     return jsonify(ok=_svc().jobs.remove(job_id))
-
-
-# ---- dictation --------------------------------------------------------------------
-
-@api.post("/dictation/toggle")
-def dictation_toggle():
-    svc = _svc()
-    svc.dictation.toggle()
-    return jsonify(dictation=svc.dictation.snapshot())
-
-
-@api.post("/dictation/cancel")
-def dictation_cancel():
-    svc = _svc()
-    svc.dictation.cancel()
-    return jsonify(dictation=svc.dictation.snapshot())
-
-
-@api.post("/dictation/copy")
-def dictation_copy():
-    svc = _svc()
-    if not svc.dictation.history:
-        return _error("Nothing to copy", 404)
-    svc.dictation.copy(svc.dictation.history[0]["text"])
-    return jsonify(ok=True)
-
-
-@api.post("/dictation/hotkey")
-def dictation_hotkey():
-    svc = _svc()
-    combo = _json_body().get("hotkey", "")
-    if not isinstance(combo, str) or len(combo) > 64:
-        return _error("Invalid shortcut")
-    try:
-        normalized = svc.dictation.set_hotkey(combo)
-    except HotkeyError as e:
-        return _error(str(e), 409)
-    return jsonify(hotkey=normalized)
 
 
 # ---- models -----------------------------------------------------------------------

@@ -62,6 +62,7 @@ def create_app(
     recorder=None,
     copy=None,
     paste=None,
+    polisher=None,
 ) -> Flask:
     paths.ensure()
     clean_temp(paths)
@@ -81,7 +82,7 @@ def create_app(
     guard = LaunchGuard(launch_token)
     dictation = DictationService(
         engine, settings, bus, paths.temp, lambda: effective_model(engine, cpu_cores()),
-        recorder=recorder, copy=copy, paste=paste,
+        recorder=recorder, copy=copy, paste=paste, polisher=polisher,
     )
     services = Services(
         paths, settings, guard, bus, models, DownloadService(models, bus), engine, jobs, dictation
@@ -92,9 +93,11 @@ def create_app(
 
     from .routes.api import api
     from .routes.pages import pages
+    from .routes.settings_api import settings_api
 
     app.register_blueprint(pages)
     app.register_blueprint(api)
+    app.register_blueprint(settings_api)
 
     if start_worker:
         jobs.start()

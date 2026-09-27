@@ -32,6 +32,7 @@ class ModelSpec:
 class TranscribeOptions:
     language: str | None = None  # None = auto-detect
     translate: bool = False
+    prompt: str | None = None  # vocabulary hint (Whisper "initial prompt")
 
 
 @dataclass

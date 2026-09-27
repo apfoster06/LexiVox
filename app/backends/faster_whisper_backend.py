@@ -74,6 +74,7 @@ class FasterWhisperBackend:
             language=opts.language,
             task="translate" if opts.translate else "transcribe",
             beam_size=5,
+            initial_prompt=opts.prompt,
         )
         out: list[Segment] = []
         for s in segments:  # a generator: decoding happens as we iterate

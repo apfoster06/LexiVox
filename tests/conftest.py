@@ -43,6 +43,7 @@ class FakeBackend:
         self.loaded = (model, device)
 
     def transcribe(self, audio_path, opts, on_segment, cancel):
+        self.last_opts = opts
         out = []
         for s in self.segments:
             if cancel.is_set():
@@ -96,9 +97,10 @@ class FakeRecorder:
         self.recording = False
         self.fail: Exception | None = None
 
-    def start(self):
+    def start(self, device_name: str = ""):
         if self.fail:
             raise self.fail
+        self.device_name = device_name
         self.recording = True
 
     def seconds(self):
@@ -131,13 +133,30 @@ def pastes() -> list[int]:
     return []
 
 
+class FakePolisher:
+    def __init__(self):
+        self.calls: list[str] = []
+        self.fail: Exception | None = None
+
+    def __call__(self, text: str) -> str:
+        self.calls.append(text)
+        if self.fail:
+            raise self.fail
+        return f"Polished: {text}"
+
+
 @pytest.fixture
-def app(paths, settings, fake_backend, fake_recorder, clipboard, pastes):
+def polisher() -> FakePolisher:
+    return FakePolisher()
+
+
+@pytest.fixture
+def app(paths, settings, fake_backend, fake_recorder, clipboard, pastes, polisher):
     models = ModelManager(paths.models, load_catalog())
     application = create_app(
         paths, settings, TOKEN, port=PORT, backends={"faster-whisper": fake_backend},
         models=models, start_worker=True, recorder=fake_recorder, copy=clipboard.append,
-        paste=lambda: pastes.append(1) or True,
+        paste=lambda: pastes.append(1) or True, polisher=polisher,
     )
     application.extensions["cvw"].dictation.beeps = False
     yield application

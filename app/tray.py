@@ -13,8 +13,14 @@ from .config import APP_NAME
 
 log = logging.getLogger(__name__)
 
-COLORS = {"idle": (15, 95, 215), "recording": (214, 40, 40), "transcribing": (212, 150, 20)}
-TITLES = {"idle": "ready", "recording": "recording…", "transcribing": "transcribing…"}
+COLORS = {
+    "idle": (15, 95, 215), "recording": (214, 40, 40),
+    "transcribing": (212, 150, 20), "polishing": (130, 80, 200),
+}
+TITLES = {
+    "idle": "ready", "recording": "recording…", "transcribing": "transcribing…",
+    "polishing": "polishing with AI…",
+}
 
 
 def make_icon(state: str):
@@ -57,7 +63,7 @@ class Tray:
             pystray.MenuItem(
                 lambda item: "Stop dictation" if self._state == "recording" else "Start dictation",
                 lambda: self._on_toggle(),
-                enabled=lambda item: self._state != "transcribing",
+                enabled=lambda item: self._state in ("idle", "recording"),
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", lambda: self._on_quit()),
@@ -67,8 +73,11 @@ class Tray:
         return True
 
     def update(self, snapshot: dict) -> None:
-        self._state = snapshot.get("state", "idle")
-        self._hotkey = snapshot.get("hotkey", self._hotkey) or ""
+        state = snapshot.get("state", "idle")
+        hotkey = snapshot.get("hotkey", self._hotkey) or ""
+        if (state, hotkey) == (self._state, self._hotkey) and self.icon is not None:
+            return  # frequent level updates; only redraw on changes
+        self._state, self._hotkey = state, hotkey
         if self.icon is None:
             return
         self.icon.icon = make_icon(self._state)

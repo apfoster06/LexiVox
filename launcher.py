@@ -31,6 +31,7 @@ from waitress import create_server  # noqa: E402
 from app import create_app, services  # noqa: E402
 from app.config import APP_NAME, Paths, SettingsStore, data_dir  # noqa: E402
 from app.logging_setup import setup_logging  # noqa: E402
+from app.overlay import RecordingOverlay  # noqa: E402
 from app.tray import Tray  # noqa: E402
 
 log = logging.getLogger("launcher")
@@ -58,6 +59,7 @@ class Launcher:
         self.window = None
         self.edge_mode = False
         self.tray = Tray(self.show, self.svc.dictation.toggle, self.request_quit)
+        self.overlay = RecordingOverlay()
         self._told_about_tray = False
         self._last_error: str | None = None
 
@@ -80,6 +82,9 @@ class Launcher:
 
     def on_dictation(self, snap: dict) -> None:
         self.tray.update(snap)
+        self.overlay.update(snap)
+        if "error" not in snap:  # frequent level-only update
+            return
         # Success is silent (the text is pasted or on the clipboard); only problems pop up.
         error = snap.get("error")
         if error and error != self._last_error:
@@ -145,8 +150,9 @@ class Launcher:
 
     def run(self, force_edge: bool) -> None:
         self.tray.start()
+        self.overlay.start()
         self.svc.dictation.listeners.append(self.on_dictation)
-        self.svc.dictation.start_hotkey()
+        self.svc.dictation.start_hotkeys()
         self.tray.update(self.svc.dictation.snapshot())
         opened = False if force_edge else self.run_webview()
         if not opened and not self.quit.is_set() and not self.run_edge():
@@ -182,6 +188,7 @@ def main() -> None:
         svc.dictation.stop()
         svc.jobs.stop()
         launcher.tray.stop()
+        launcher.overlay.stop()
         server.close()
         log.info("stopped")
 
