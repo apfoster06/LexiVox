@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="brand">{{ app_name }}</h1>
+    <span id="engine-badge" class="badge" title="Engine in use"></span>
+    <div class="topbar-actions">
+      <button id="theme-toggle" class="btn ghost" type="button" aria-label="Change theme">Theme: system</button>
+    </div>
+  </header>
+
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+  <main class="layout">
+    <section class="panel left" aria-labelledby="new-heading">
+      <h2 id="new-heading" class="panel-title">Transcribe</h2>
+
+      <label id="dropzone" class="dropzone" for="file-input">
+        <input id="file-input" type="file" multiple class="visually-hidden"
+               accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4,.mkv,.mov,.avi,.webm">
+        <span class="dz-title">Drop audio or video files here</span>
+        <span class="dz-sub">or click to choose files</span>
+      </label>
+
+      <div class="options">
+        <div class="field">
+          <label for="model-select">Model</label>
+          <select id="model-select"></select>
+          <div id="model-status" class="hint"></div>
+          <div id="download-row" class="download-row" hidden>
+            <button id="download-btn" class="btn" type="button">Download model</button>
+            <button id="download-cancel" class="btn ghost" type="button" hidden>Cancel</button>
+            <progress id="download-progress" max="1" value="0" hidden></progress>
+            <span id="download-text" class="hint"></span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="language-select">Language</label>
+          <select id="language-select"></select>
+        </div>
+        <label class="check">
+          <input id="translate-check" type="checkbox"> Translate to English
+        </label>
+      </div>
+
+      <div id="upload-status" class="hint" aria-live="polite"></div>
+
+      <h2 class="panel-title">Queue</h2>
+      <ul id="queue" class="queue" aria-label="Transcription queue"></ul>
+      <p id="queue-empty" class="hint">No files yet.</p>
+    </section>
+
+    <section class="panel right" aria-labelledby="transcript-heading">
+      <div class="transcript-head">
+        <h2 id="transcript-heading" class="panel-title">Transcript</h2>
+        <div class="toolbar">
+          <input id="search" type="search" placeholder="Search transcript" aria-label="Search transcript">
+          <label class="check"><input id="ts-toggle" type="checkbox" checked> Timestamps</label>
+          <button id="copy-btn" class="btn ghost" type="button">Copy</button>
+        </div>
+      </div>
+      <div id="transcript-meta" class="hint"></div>
+      <progress id="job-progress" max="1" value="0" hidden></progress>
+      <div id="transcript" class="transcript" tabindex="0" aria-live="polite">
+        <p class="hint">Pick a file in the queue to see its transcript.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
