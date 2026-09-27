@@ -13,6 +13,8 @@ from .. import audio, services
 from ..backends.base import TranscribeOptions
 from ..backends.hardware import cpu_cores, cpu_name
 from ..config import APP_NAME
+from ..dictation.hotkey import HotkeyError
+from ..engine import effective_model as _effective_model
 from ..engine import recommended_model
 from ..events import sse_format
 from ..languages import LANGUAGES
@@ -38,10 +40,7 @@ def _json_body() -> dict:
 
 
 def effective_model(svc) -> str:
-    s = svc.settings.get()
-    if s.model in svc.models.catalog:
-        return s.model
-    return recommended_model(svc.engine.current(), cpu_cores())
+    return _effective_model(svc.engine, cpu_cores())
 
 
 def models_state(svc) -> list[dict]:
@@ -87,6 +86,7 @@ def state():
         download=svc.downloads.state(),
         jobs=[j.summary() for j in svc.jobs.list()],
         languages=LANGUAGES,
+        dictation=svc.dictation.snapshot(),
     )
 
 
@@ -174,6 +174,44 @@ def cancel_job(job_id: str):
 @api.delete("/jobs/<job_id>")
 def remove_job(job_id: str):
     return jsonify(ok=_svc().jobs.remove(job_id))
+
+
+# ---- dictation --------------------------------------------------------------------
+
+@api.post("/dictation/toggle")
+def dictation_toggle():
+    svc = _svc()
+    svc.dictation.toggle()
+    return jsonify(dictation=svc.dictation.snapshot())
+
+
+@api.post("/dictation/cancel")
+def dictation_cancel():
+    svc = _svc()
+    svc.dictation.cancel()
+    return jsonify(dictation=svc.dictation.snapshot())
+
+
+@api.post("/dictation/copy")
+def dictation_copy():
+    svc = _svc()
+    if not svc.dictation.history:
+        return _error("Nothing to copy", 404)
+    svc.dictation.copy(svc.dictation.history[0]["text"])
+    return jsonify(ok=True)
+
+
+@api.post("/dictation/hotkey")
+def dictation_hotkey():
+    svc = _svc()
+    combo = _json_body().get("hotkey", "")
+    if not isinstance(combo, str) or len(combo) > 64:
+        return _error("Invalid shortcut")
+    try:
+        normalized = svc.dictation.set_hotkey(combo)
+    except HotkeyError as e:
+        return _error(str(e), 409)
+    return jsonify(hotkey=normalized)
 
 
 # ---- models -----------------------------------------------------------------------

@@ -76,6 +76,7 @@ class Settings:
     log_retention_days: int = 14
     max_upload_mb: int = 4096
     theme: str = "system"
+    hotkey: str = "Ctrl+Alt+Space"  # dictation toggle; "" = off
     benchmark: dict = field(default_factory=dict)
     first_run_done: bool = False
 

@@ -84,13 +84,56 @@ def fake_backend() -> FakeBackend:
     return FakeBackend()
 
 
+class FakeRecorder:
+    """Pretends to record by copying a prepared WAV file."""
+
+    max_seconds = 900
+
+    def __init__(self):
+        self.source: Path | None = None
+        self.duration = 2.0
+        self.level = 0.0
+        self.recording = False
+        self.fail: Exception | None = None
+
+    def start(self):
+        if self.fail:
+            raise self.fail
+        self.recording = True
+
+    def seconds(self):
+        return 0.5 if self.recording else 0.0
+
+    def stop(self, dst: Path) -> float:
+        self.recording = False
+        if self.source is not None:
+            shutil.copy(self.source, dst)
+        else:
+            dst.write_bytes(b"")
+        return self.duration
+
+    def cancel(self):
+        self.recording = False
+
+
 @pytest.fixture
-def app(paths, settings, fake_backend):
+def fake_recorder() -> FakeRecorder:
+    return FakeRecorder()
+
+
+@pytest.fixture
+def clipboard() -> list[str]:
+    return []
+
+
+@pytest.fixture
+def app(paths, settings, fake_backend, fake_recorder, clipboard):
     models = ModelManager(paths.models, load_catalog())
     application = create_app(
         paths, settings, TOKEN, port=PORT, backends={"faster-whisper": fake_backend},
-        models=models, start_worker=True,
+        models=models, start_worker=True, recorder=fake_recorder, copy=clipboard.append,
     )
+    application.extensions["cvw"].dictation.beeps = False
     yield application
     application.extensions["cvw"].jobs.stop()
 

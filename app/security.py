@@ -35,6 +35,13 @@ class LaunchGuard:
         # Separate from the launch token, so a leaked launch URL is useless after first use.
         self.session_secret = secrets.token_urlsafe(32)
 
+    def issue(self) -> str:
+        """A fresh single-use launch token (used to reopen an Edge window from the tray)."""
+        with self._lock:
+            self._launch_token = secrets.token_urlsafe(32)
+            self._used = False
+            return self._launch_token
+
     def exchange(self, candidate: str) -> bool:
         with self._lock:
             if self._used or not _equal(candidate, self._launch_token):

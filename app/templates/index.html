@@ -6,6 +6,7 @@
   <title>{{ app_name }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/dictation.js') }}" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -20,7 +21,33 @@
 
   <main class="layout">
     <section class="panel left" aria-labelledby="new-heading">
-      <h2 id="new-heading" class="panel-title">Transcribe</h2>
+      <div class="dictation" aria-labelledby="dictation-heading">
+        <h2 id="dictation-heading" class="panel-title">Dictation</h2>
+        <div class="dict-row">
+          <button id="dict-btn" class="btn dict-btn" type="button">Start dictation</button>
+          <div class="dict-status">
+            <div id="dict-status" aria-live="polite">Ready</div>
+            <progress id="dict-level" max="1" value="0" hidden aria-label="Microphone level"></progress>
+          </div>
+        </div>
+        <div class="dict-hotkey">
+          <span class="hint">Shortcut:</span>
+          <kbd id="hotkey-display">–</kbd>
+          <button id="hotkey-change" class="btn ghost small" type="button">Change</button>
+          <button id="hotkey-off" class="btn ghost small" type="button">Turn off</button>
+        </div>
+        <div id="hotkey-capture" class="hint" hidden>Press the new shortcut now (Esc to cancel)…</div>
+        <div id="dict-error" class="hint error" hidden></div>
+        <div id="dict-last" class="dict-last" hidden>
+          <div class="dict-last-head">
+            <span class="hint">Last dictation (copied to clipboard)</span>
+            <button id="dict-copy" class="btn ghost small" type="button">Copy again</button>
+          </div>
+          <p id="dict-last-text"></p>
+        </div>
+      </div>
+
+      <h2 id="new-heading" class="panel-title">Transcribe files</h2>
 
       <label id="dropzone" class="dropzone" for="file-input">
         <input id="file-input" type="file" multiple class="visually-hidden"

@@ -68,6 +68,7 @@ async function loadState() {
   renderOptions();
   renderDownload(s.download);
   renderQueue();
+  if (typeof renderDictation === "function") renderDictation(s.dictation);
   if (state.selected && state.jobs.has(state.selected)) selectJob(state.selected);
 }
 
@@ -262,6 +263,7 @@ function applyTheme(theme) {
 
 function connectEvents() {
   const es = new EventSource("/api/events");
+  window.appEvents = es; // dictation.js adds its own listeners
   es.addEventListener("sync", () => loadState().catch(console.error));
   es.addEventListener("job", (e) => {
     const j = JSON.parse(e.data);

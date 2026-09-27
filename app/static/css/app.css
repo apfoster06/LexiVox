@@ -110,6 +110,21 @@ body {
 .panel-title { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
 .panel-title + .panel-title, .options + .hint + .panel-title, #upload-status + .panel-title { margin-top: 18px; }
 
+.dictation { border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 14px; display: grid; gap: 8px; }
+.dict-row { display: flex; align-items: center; gap: 12px; }
+.dict-btn { min-width: 140px; padding: 8px 14px; }
+.dict-btn.recording { background: var(--err); border-color: var(--err); color: #fff; }
+.dict-status { flex: 1; display: grid; gap: 4px; font-size: 14px; min-width: 0; }
+.dict-hotkey { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+kbd {
+  font: 600 13px/1 "Segoe UI", system-ui, sans-serif; padding: 4px 8px; border-radius: 6px;
+  background: var(--surface-2); border: 1px solid var(--border); border-bottom-width: 2px;
+}
+.dict-last { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.dict-last-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.dict-last p { margin: 6px 0 0; white-space: pre-wrap; max-height: 9em; overflow: auto; }
+body.dict-recording .topbar { box-shadow: inset 0 -3px 0 var(--err); }
+
 .dropzone {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 4px; padding: 28px 12px; border: 2px dashed var(--border);

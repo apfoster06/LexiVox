@@ -12,8 +12,10 @@ from flask import Flask
 
 from .backends import installed_backends
 from .backends.base import Backend
+from .backends.hardware import cpu_cores
 from .config import Paths, SettingsStore
-from .engine import Engine
+from .dictation.service import DictationService
+from .engine import Engine, effective_model
 from .events import EventBus
 from .jobs import JobManager
 from .models.downloads import DownloadService
@@ -33,6 +35,7 @@ class Services:
     downloads: DownloadService
     engine: Engine
     jobs: JobManager
+    dictation: DictationService
     last_heartbeat: float = field(default_factory=time.monotonic)
 
 
@@ -56,6 +59,8 @@ def create_app(
     backends: dict[str, Backend] | None = None,
     models: ModelManager | None = None,
     start_worker: bool = True,
+    recorder=None,
+    copy=None,
 ) -> Flask:
     paths.ensure()
     clean_temp(paths)
@@ -73,7 +78,13 @@ def create_app(
     engine = Engine(backends if backends is not None else installed_backends(), models, settings)
     jobs = JobManager(engine, bus, paths.temp)
     guard = LaunchGuard(launch_token)
-    services = Services(paths, settings, guard, bus, models, DownloadService(models, bus), engine, jobs)
+    dictation = DictationService(
+        engine, settings, bus, paths.temp, lambda: effective_model(engine, cpu_cores()),
+        recorder=recorder, copy=copy,
+    )
+    services = Services(
+        paths, settings, guard, bus, models, DownloadService(models, bus), engine, jobs, dictation
+    )
     app.extensions["cvw"] = services
 
     init_security(app, guard)

@@ -2,8 +2,9 @@
 
 - waitress (not the Flask dev server) on 127.0.0.1 and a random free port
 - a per-launch token; the window opens /?launch=<token> which becomes a session cookie
-- pywebview (WebView2) window; the process exits when the window closes
-- fallback: Edge in app mode with an isolated profile, plus a heartbeat watchdog
+- pywebview (WebView2) window; closing it hides to the tray so the dictation hotkey
+  keeps working. Quit from the tray menu.
+- fallback: Edge in app mode with an isolated profile (heartbeat watchdog if no tray)
 """
 
 from __future__ import annotations
@@ -30,26 +31,11 @@ from waitress import create_server  # noqa: E402
 from app import create_app, services  # noqa: E402
 from app.config import APP_NAME, Paths, SettingsStore, data_dir  # noqa: E402
 from app.logging_setup import setup_logging  # noqa: E402
+from app.tray import Tray  # noqa: E402
 
 log = logging.getLogger("launcher")
 
 HEARTBEAT_TIMEOUT = 30.0
-
-
-def open_webview(url: str) -> bool:
-    try:
-        import webview
-    except ImportError:
-        log.warning("pywebview is not available")
-        return False
-    try:
-        webview.create_window(APP_NAME, url, width=1200, height=800, min_size=(420, 480))
-        # private_mode keeps no cookies/storage between launches.
-        webview.start(private_mode=True)
-        return True
-    except Exception:
-        log.exception("pywebview failed to start")
-        return False
 
 
 def find_edge() -> str | None:
@@ -61,22 +47,115 @@ def find_edge() -> str | None:
     return next((c for c in candidates if c and Path(c).is_file()), None)
 
 
-def open_edge(url: str, paths: Paths, app) -> bool:
-    edge = find_edge()
-    if not edge:
-        log.error("Microsoft Edge was not found")
-        return False
-    profile = paths.root / "edge-profile"
-    subprocess.Popen([
-        edge, f"--app={url}", f"--user-data-dir={profile}", "--no-first-run",
-        "--no-default-browser-check", "--disable-sync",
-    ])
-    svc = services(app)
-    svc.last_heartbeat = time.monotonic() + 30  # give the window time to load
-    while time.monotonic() - svc.last_heartbeat < HEARTBEAT_TIMEOUT:
-        time.sleep(2)
-    log.info("no heartbeat for %ss; shutting down", HEARTBEAT_TIMEOUT)
-    return True
+class Launcher:
+    def __init__(self, app, port: int, first_token: str, paths: Paths):
+        self.app = app
+        self.svc = services(app)
+        self.port = port
+        self.first_token = first_token
+        self.paths = paths
+        self.quit = threading.Event()
+        self.window = None
+        self.edge_mode = False
+        self.tray = Tray(self.show, self.svc.dictation.toggle, self.request_quit)
+        self._told_about_tray = False
+        self._last_state = "idle"
+        self._last_error: str | None = None
+
+    def url(self, token: str) -> str:
+        return f"http://127.0.0.1:{self.port}/?launch={token}"
+
+    # ---- tray actions -------------------------------------------------------------
+
+    def show(self) -> None:
+        if self.window is not None:
+            self.window.show()
+            self.window.restore()
+        elif self.edge_mode:
+            self.open_edge(self.url(self.svc.guard.issue()))
+
+    def request_quit(self) -> None:
+        self.quit.set()
+        if self.window is not None:
+            self.window.destroy()
+
+    def on_dictation(self, snap: dict) -> None:
+        self.tray.update(snap)
+        state, previous = snap["state"], self._last_state
+        self._last_state = state
+        error = snap.get("error")
+        if error and error != self._last_error:
+            self.tray.notify(error)
+        elif previous == "transcribing" and state == "idle" and not error and snap.get("history"):
+            text = snap["history"][0]["text"]
+            self.tray.notify("Copied to clipboard: " + (text[:90] + "…" if len(text) > 90 else text))
+        self._last_error = error
+
+    # ---- windows ------------------------------------------------------------------
+
+    def run_webview(self) -> bool:
+        try:
+            import webview
+        except ImportError:
+            log.warning("pywebview is not available")
+            return False
+        try:
+            self.window = webview.create_window(
+                APP_NAME, self.url(self.first_token), width=1200, height=800, min_size=(420, 480)
+            )
+            self.window.events.closing += self._on_closing
+            webview.start(private_mode=True)  # blocks until the window is destroyed
+            return True
+        except Exception:
+            log.exception("pywebview failed to start")
+            self.window = None
+            return False
+
+    def _on_closing(self):
+        if self.quit.is_set() or self.tray.icon is None:
+            return True
+        self.window.hide()
+        if not self._told_about_tray:
+            self._told_about_tray = True
+            hotkey = self.svc.settings.get().hotkey
+            self.tray.notify(
+                f"Still running in the tray{f' — press {hotkey} to dictate' if hotkey else ''}. "
+                "Right-click the icon to quit."
+            )
+        return False  # cancel the close
+
+    def open_edge(self, url: str) -> bool:
+        edge = find_edge()
+        if not edge:
+            log.error("Microsoft Edge was not found")
+            return False
+        subprocess.Popen([
+            edge, f"--app={url}", f"--user-data-dir={self.paths.root / 'edge-profile'}",
+            "--no-first-run", "--no-default-browser-check", "--disable-sync",
+        ])
+        return True
+
+    def run_edge(self) -> bool:
+        self.edge_mode = True
+        if not self.open_edge(self.url(self.first_token)):
+            return False
+        if self.tray.icon is not None:
+            self.quit.wait()  # the tray's Quit ends the app
+            return True
+        self.svc.last_heartbeat = time.monotonic() + 30  # give the window time to load
+        while time.monotonic() - self.svc.last_heartbeat < HEARTBEAT_TIMEOUT:
+            time.sleep(2)
+        log.info("no heartbeat for %ss; shutting down", HEARTBEAT_TIMEOUT)
+        return True
+
+    def run(self, force_edge: bool) -> None:
+        self.tray.start()
+        self.svc.dictation.listeners.append(self.on_dictation)
+        self.svc.dictation.start_hotkey()
+        self.tray.update(self.svc.dictation.snapshot())
+        opened = False if force_edge else self.run_webview()
+        if not opened and not self.quit.is_set() and not self.run_edge():
+            log.error("could not open a window")
 
 
 def main() -> None:
@@ -100,13 +179,14 @@ def main() -> None:
     threading.Thread(target=server.run, name="waitress", daemon=True).start()
     log.info("%s listening on 127.0.0.1:%s", APP_NAME, port)
 
-    url = f"http://127.0.0.1:{port}/?launch={token}"
+    launcher = Launcher(app, port, token, paths)
     try:
-        opened = False if args.edge else open_webview(url)
-        if not opened and not open_edge(url, paths, app):
-            log.error("could not open a window")
+        launcher.run(args.edge)
     finally:
-        services(app).jobs.stop()
+        svc = services(app)
+        svc.dictation.stop()
+        svc.jobs.stop()
+        launcher.tray.stop()
         server.close()
         log.info("stopped")
 

@@ -69,6 +69,14 @@ def recommended_model(choice: Choice | None, cores: int) -> str:
     return "small" if cores >= 8 else "base"
 
 
+def effective_model(engine: "Engine", cores: int) -> str:
+    """The model the user picked, or the hardware recommendation."""
+    chosen = engine.settings.get().model
+    if chosen in engine.models.catalog:
+        return chosen
+    return recommended_model(engine.current(), cores)
+
+
 class Engine:
     def __init__(self, backends: dict[str, Backend], models: ModelManager, settings: SettingsStore):
         self.backends = backends
