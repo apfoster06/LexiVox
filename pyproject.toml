@@ -1,0 +1,29 @@
+[project]
+name = "crowe-vibe-whisper"
+version = "0.1.0"
+description = "Private, offline audio transcription for Windows (inspired by Vibe)."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "flask>=3.1",
+    "waitress>=3.0",
+    "pywebview>=6.2",
+]
+
+[project.optional-dependencies]
+# Each machine installs only the engine(s) its hardware can use; see scripts/install.ps1.
+cpu = ["faster-whisper>=1.2"]
+nvidia = ["faster-whisper>=1.2"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
+addopts = "-q"
+markers = ["integration: needs ffmpeg and a downloaded model"]

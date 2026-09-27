@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+# Per-machine data lives in %LOCALAPPDATA%\CroweVibeWhisper, never here.
+*.log
+/models/
+/local-data/
