@@ -62,6 +62,29 @@ def register_app_id(icon_png: Path) -> None:
         log.warning("could not register the app name for notifications")
 
 
+def start_menu_shortcut() -> Path:
+    programs = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    return programs / f"{APP_NAME}.lnk"
+
+
+def ensure_shortcut(project_root: Path) -> None:
+    """Windows shows our name and icon on notifications only when a Start menu shortcut
+    carries the app ID, so create one (once) with scripts/make-shortcut.ps1."""
+    if os.name != "nt" or start_menu_shortcut().exists():
+        return
+    import subprocess
+
+    script = project_root / "scripts" / "make-shortcut.ps1"
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+            capture_output=True, timeout=60, check=True, creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        log.info("created the Start menu shortcut")
+    except (OSError, subprocess.SubprocessError) as e:
+        log.warning("could not create the Start menu shortcut: %s", e)
+
+
 def set_window_icon(title: str, icon_ico: Path) -> None:
     """Give our top-level window (found by title, in this process) the app icon."""
     if os.name != "nt":
