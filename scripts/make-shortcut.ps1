@@ -7,22 +7,31 @@
   carries the app's AppUserModelID, which is what makes Windows show the name
   "LexiVox" and its icon on notifications instead of "Python".
   The app runs this once automatically if the Start menu shortcut is missing.
+  -Target/-Arguments point it somewhere else (create-shortcut.ps1 uses LexiVox.bat).
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\make-shortcut.ps1 -Desktop
 #>
 param(
     [switch]$Desktop,
+    [string]$Target,
+    [string]$Arguments,
+    [switch]$Minimized,
     [string]$AppId = "LexiVox.App",
     [string]$Name = "LexiVox"
 )
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
-$target = Join-Path $root ".venv\Scripts\pythonw.exe"
-$launcher = Join-Path $root "launcher.py"
-$icon = Join-Path $env:LOCALAPPDATA "LexiVox\icon\app.ico"
-if (-not (Test-Path $target)) { throw "Run 'uv sync' first: $target not found." }
+if (-not $Target) {
+    $Target = Join-Path $root ".venv\Scripts\pythonw.exe"
+    if (-not $PSBoundParameters.ContainsKey("Arguments")) { $Arguments = "`"$(Join-Path $root 'launcher.py')`"" }
+}
+if (-not (Test-Path $Target)) { throw "Not found: $Target. Run scripts\install.ps1 first." }
+# The repo ships the icon, so shortcuts look right even before the app's first run.
+$icon = Join-Path $root "assets\brand\lexivox.ico"
+if (-not (Test-Path $icon)) { $icon = Join-Path $env:LOCALAPPDATA "LexiVox\icon\app.ico" }
+$showCmd = if ($Minimized) { 7 } else { 1 }  # 7 = start minimized: hides a .bat's console flash
 
 Add-Type -TypeDefinition @"
 using System;
@@ -68,12 +77,13 @@ interface IPropertyStore {
 class LxShellLink {}
 
 public static class LxShortcut {
-    public static void Create(string path, string target, string args, string dir, string icon, string appId, string description) {
+    public static void Create(string path, string target, string args, string dir, string icon, string appId, string description, int showCmd) {
         var link = (IShellLinkW)new LxShellLink();
         link.SetPath(target);
         link.SetArguments(args);
         link.SetWorkingDirectory(dir);
         link.SetDescription(description);
+        link.SetShowCmd(showCmd);
         if (System.IO.File.Exists(icon)) link.SetIconLocation(icon, 0);
         // PKEY_AppUserModel_ID
         var key = new LxPropertyKey { fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), pid = 5 };
@@ -94,6 +104,6 @@ $programs = [Environment]::GetFolderPath("Programs")
 $paths = @(Join-Path $programs "$Name.lnk")
 if ($Desktop) { $paths += Join-Path ([Environment]::GetFolderPath("Desktop")) "$Name.lnk" }
 foreach ($p in $paths) {
-    [LxShortcut]::Create($p, $target, "`"$launcher`"", $root, $icon, $AppId, "Private, offline dictation and transcription")
+    [LxShortcut]::Create($p, $Target, "$Arguments", $root, $icon, $AppId, "Private, offline dictation and transcription", $showCmd)
     Write-Output "Created $p"
 }
