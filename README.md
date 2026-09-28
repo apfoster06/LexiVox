@@ -19,6 +19,9 @@ reporting. The only network access is:
 - **Files:** drop in audio or video files for a timestamped transcript.
 - Custom vocabulary, filler-word removal, microphone picker, recording indicator, tray icon.
 
+**Full documentation is in [docs/](docs/README.md):** user guide, setup and deployment,
+architecture, security and privacy, network egress, hardware matrix, API and development.
+
 ## Install on a PC
 
 Needs [uv](https://docs.astral.sh/uv/) (`winget install astral-sh.uv`) and ffmpeg
