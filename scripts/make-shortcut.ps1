@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-  Creates a Start menu (and optionally Desktop) shortcut for Crowe Vibe Whisper.
+  Creates a Start menu (and optionally Desktop) shortcut for LexiVox.
 
 .DESCRIPTION
   The shortcut runs launcher.py with the project's pythonw.exe (no console window) and
   carries the app's AppUserModelID, which is what makes Windows show the name
-  "Crowe Vibe Whisper" and its icon on notifications instead of "Python".
+  "LexiVox" and its icon on notifications instead of "Python".
   The app runs this once automatically if the Start menu shortcut is missing.
 
 .EXAMPLE
@@ -13,15 +13,15 @@
 #>
 param(
     [switch]$Desktop,
-    [string]$AppId = "CroweVibeWhisper.App",
-    [string]$Name = "Crowe Vibe Whisper"
+    [string]$AppId = "LexiVox.App",
+    [string]$Name = "LexiVox"
 )
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
 $target = Join-Path $root ".venv\Scripts\pythonw.exe"
 $launcher = Join-Path $root "launcher.py"
-$icon = Join-Path $env:LOCALAPPDATA "CroweVibeWhisper\icon\app.ico"
+$icon = Join-Path $env:LOCALAPPDATA "LexiVox\icon\app.ico"
 if (-not (Test-Path $target)) { throw "Run 'uv sync' first: $target not found." }
 
 Add-Type -TypeDefinition @"
@@ -50,34 +50,34 @@ interface IShellLinkW {
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public struct CvwPropertyKey { public Guid fmtid; public uint pid; }
+public struct LxPropertyKey { public Guid fmtid; public uint pid; }
 
 [StructLayout(LayoutKind.Explicit, Size = 16)]
-public struct CvwPropVariant { [FieldOffset(0)] public ushort vt; [FieldOffset(8)] public IntPtr p; }
+public struct LxPropVariant { [FieldOffset(0)] public ushort vt; [FieldOffset(8)] public IntPtr p; }
 
 [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IPropertyStore {
     void GetCount(out uint c);
-    void GetAt(uint i, out CvwPropertyKey k);
-    void GetValue(ref CvwPropertyKey k, out CvwPropVariant v);
-    void SetValue(ref CvwPropertyKey k, ref CvwPropVariant v);
+    void GetAt(uint i, out LxPropertyKey k);
+    void GetValue(ref LxPropertyKey k, out LxPropVariant v);
+    void SetValue(ref LxPropertyKey k, ref LxPropVariant v);
     void Commit();
 }
 
 [ComImport, Guid("00021401-0000-0000-C000-000000000046")]
-class CvwShellLink {}
+class LxShellLink {}
 
-public static class CvwShortcut {
+public static class LxShortcut {
     public static void Create(string path, string target, string args, string dir, string icon, string appId, string description) {
-        var link = (IShellLinkW)new CvwShellLink();
+        var link = (IShellLinkW)new LxShellLink();
         link.SetPath(target);
         link.SetArguments(args);
         link.SetWorkingDirectory(dir);
         link.SetDescription(description);
         if (System.IO.File.Exists(icon)) link.SetIconLocation(icon, 0);
         // PKEY_AppUserModel_ID
-        var key = new CvwPropertyKey { fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), pid = 5 };
-        var value = new CvwPropVariant { vt = 31, p = Marshal.StringToCoTaskMemUni(appId) };  // VT_LPWSTR
+        var key = new LxPropertyKey { fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), pid = 5 };
+        var value = new LxPropVariant { vt = 31, p = Marshal.StringToCoTaskMemUni(appId) };  // VT_LPWSTR
         try {
             var store = (IPropertyStore)link;
             store.SetValue(ref key, ref value);
@@ -94,6 +94,6 @@ $programs = [Environment]::GetFolderPath("Programs")
 $paths = @(Join-Path $programs "$Name.lnk")
 if ($Desktop) { $paths += Join-Path ([Environment]::GetFolderPath("Desktop")) "$Name.lnk" }
 foreach ($p in $paths) {
-    [CvwShortcut]::Create($p, $target, "`"$launcher`"", $root, $icon, $AppId, "Private, offline dictation and transcription")
+    [LxShortcut]::Create($p, $target, "`"$launcher`"", $root, $icon, $AppId, "Private, offline dictation and transcription")
     Write-Output "Created $p"
 }

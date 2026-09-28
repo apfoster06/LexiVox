@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Installs Crowe Vibe Whisper on this Windows machine, choosing the speech engines that
+  Installs LexiVox on this Windows machine, choosing the speech engines that
   match its hardware.
 
 .DESCRIPTION
@@ -97,6 +97,6 @@ if (-not $NoShortcut) {
 }
 
 Say ""
-Say "Done. Start 'Crowe Vibe Whisper' from the Start menu (or run scripts\run.ps1)." Green
+Say "Done. Start 'LexiVox' from the Start menu (or run scripts\run.ps1)." Green
 Say "First time: open Settings > Speech recognition and download a model," Green
-Say "or copy a models folder from another PC into %LOCALAPPDATA%\CroweVibeWhisper\models and click Rescan." Green
+Say "or copy a models folder from another PC into %LOCALAPPDATA%\LexiVox\models and click Rescan." Green

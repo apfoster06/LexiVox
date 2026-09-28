@@ -1,4 +1,4 @@
-# Crowe Vibe Whisper
+# LexiVox
 
 Private, offline dictation and transcription for Windows. It's inspired by
 [Vibe](https://github.com/thewh1teagle/vibe) and rebuilt in Python + Flask with a plain
@@ -42,7 +42,7 @@ Override with `-Engines cpu,intel,nvidia`. It then creates a Start menu shortcut
 The app picks the fastest engine automatically; **Settings → Speech recognition → Engine**
 lets you choose a specific GPU or CPU instead. If a GPU fails, the app finishes on the CPU.
 The Intel NPU isn't offered yet: OpenVINO 2026.4's Whisper pipeline fails on it
-(`CVW_ENABLE_NPU=1` lists it anyway, for testing).
+(`LEXIVOX_ENABLE_NPU=1` lists it anyway, for testing).
 
 ### Models
 
@@ -50,7 +50,7 @@ Open **Settings → Speech recognition**, pick a model, and click **Download mod
 engine has its own copy (OpenVINO and faster-whisper use different formats).
 Recommended: Large v3 Turbo on a GPU, Small on a fast CPU, Base on a slow one.
 
-**Offline / many PCs:** copy `%LOCALAPPDATA%\CroweVibeWhisper\models\` from a PC that has
+**Offline / many PCs:** copy `%LOCALAPPDATA%\LexiVox\models\` from a PC that has
 the models to the same place on another PC, then click **Rescan**. Every file is checked
 against its pinned SHA-256, so a damaged or altered copy is refused.
 
@@ -77,7 +77,7 @@ uv run pytest
 
 ## Where data lives
 
-Everything is stored per machine in `%LOCALAPPDATA%\CroweVibeWhisper\`: settings,
+Everything is stored per machine in `%LOCALAPPDATA%\LexiVox\`: settings,
 models, compiled-model cache, and logs. Logs are redacted and deleted after 14 days;
 dictated text is never logged.
 

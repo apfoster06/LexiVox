@@ -54,7 +54,7 @@ class Tray:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", lambda: self._on_quit()),
         )
-        self.icon = pystray.Icon("CroweVibeWhisper", make_icon("idle"), APP_NAME, menu)
+        self.icon = pystray.Icon("LexiVox", make_icon("idle"), APP_NAME, menu)
         threading.Thread(target=self.icon.run, name="tray", daemon=True).start()
         return True
 

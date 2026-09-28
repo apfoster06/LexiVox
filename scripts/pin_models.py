@@ -50,7 +50,7 @@ SKIP = {".gitattributes", "README.md"}
 
 
 def _get(url: str) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": "crowe-vibe-whisper-pin"})
+    req = urllib.request.Request(url, headers={"User-Agent": "lexivox-pin"})
     with urllib.request.urlopen(req, timeout=60) as resp:
         return resp.read()
 

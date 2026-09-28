@@ -1,6 +1,6 @@
 """Per-machine paths and settings.
 
-Everything lives under %LOCALAPPDATA%\\CroweVibeWhisper (never in the repo), so each
+Everything lives under %LOCALAPPDATA%\\LexiVox (never in the repo), so each
 machine keeps its own hardware choice, models, history and logs.
 """
 
@@ -13,8 +13,9 @@ import threading
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
-APP_NAME = "Crowe Vibe Whisper"
-APP_DIR_NAME = "CroweVibeWhisper"
+APP_NAME = "LexiVox"
+APP_DIR_NAME = "LexiVox"
+LEGACY_DIR_NAME = "CroweVibeWhisper"  # the app's working name before LexiVox
 
 DEFAULT_SUMMARY_PROMPT = (
     "Summarize the following transcript. Start with a one-paragraph overview, "
@@ -26,11 +27,24 @@ log = logging.getLogger(__name__)
 
 
 def data_dir() -> Path:
-    override = os.environ.get("CVW_DATA_DIR")
+    override = os.environ.get("LEXIVOX_DATA_DIR")
     if override:
         return Path(override)
-    local = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    return Path(local) / APP_DIR_NAME
+    local = Path(os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local"))
+    return migrate_legacy_dir(local / LEGACY_DIR_NAME, local / APP_DIR_NAME)
+
+
+def migrate_legacy_dir(old: Path, new: Path) -> Path:
+    """Move data (models, settings, logs) from the pre-rename folder, once. If the move
+    fails (e.g. files in use), keep using the old folder rather than starting empty."""
+    if new.exists() or not old.exists():
+        return new
+    try:
+        os.replace(old, new)
+        return new
+    except OSError as e:
+        log.warning("could not move the old data folder, using it as is: %s", e)
+        return old
 
 
 @dataclass(frozen=True)

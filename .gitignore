@@ -5,7 +5,7 @@ __pycache__/
 *.egg-info/
 build/
 dist/
-# Per-machine data lives in %LOCALAPPDATA%\CroweVibeWhisper, never here.
+# Per-machine data lives in %LOCALAPPDATA%\LexiVox, never here.
 *.log
 /models/
 /local-data/

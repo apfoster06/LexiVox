@@ -1,5 +1,5 @@
 [project]
-name = "crowe-vibe-whisper"
+name = "lexivox"
 version = "0.1.0"
 description = "Private, offline audio transcription for Windows (inspired by Vibe)."
 readme = "README.md"

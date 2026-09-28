@@ -16,7 +16,7 @@ from app.models.manager import ModelManager, load_catalog
 PORT = 5555
 BASE = f"http://127.0.0.1:{PORT}"
 TOKEN = "test-launch-token"
-HDR = {"X-Requested-With": "CroweVibeWhisper"}
+HDR = {"X-Requested-With": "LexiVox"}
 
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 needs_ffmpeg = pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg not on PATH")
@@ -174,9 +174,9 @@ def app(paths, settings, fake_backend, fake_recorder, clipboard, pastes, polishe
         models=models, start_worker=True, recorder=fake_recorder, copy=clipboard.append,
         paste=lambda: pastes.append(1) or True, polisher=polisher,
     )
-    application.extensions["cvw"].dictation.beeps = False
+    application.extensions["lexivox"].dictation.beeps = False
     yield application
-    application.extensions["cvw"].jobs.stop()
+    application.extensions["lexivox"].jobs.stop()
 
 
 @pytest.fixture

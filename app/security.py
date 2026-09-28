@@ -15,9 +15,9 @@ import threading
 
 from flask import Flask, Response, jsonify, redirect, request
 
-COOKIE_NAME = "cvw_session"
+COOKIE_NAME = "lexivox_session"
 CSRF_HEADER = "X-Requested-With"
-CSRF_VALUE = "CroweVibeWhisper"
+CSRF_VALUE = "LexiVox"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 CSP = (

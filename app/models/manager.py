@@ -204,7 +204,7 @@ class ModelManager:
     def _fetch(self, url, target: Path, f: ModelFile, done, total, progress, cancel) -> int:
         part = target.with_name(target.name + ".part")
         h = hashlib.sha256()
-        req = urllib.request.Request(url, headers={"User-Agent": "crowe-vibe-whisper"})
+        req = urllib.request.Request(url, headers={"User-Agent": "lexivox"})
         try:
             with urllib.request.urlopen(req, timeout=60) as resp, part.open("wb") as out:
                 while chunk := resp.read(_CHUNK):

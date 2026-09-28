@@ -89,7 +89,7 @@ def create_app(
     services = Services(
         paths, settings, guard, bus, models, DownloadService(models, bus), engine, jobs, dictation
     )
-    app.extensions["cvw"] = services
+    app.extensions["lexivox"] = services
 
     init_security(app, guard)
 
@@ -114,4 +114,4 @@ def create_app(
 
 
 def services(app: Flask) -> Services:
-    return app.extensions["cvw"]
+    return app.extensions["lexivox"]

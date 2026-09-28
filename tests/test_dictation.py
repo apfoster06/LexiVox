@@ -257,7 +257,7 @@ def test_clipboard_round_trip_restores_original():
 
     original = read_text()
     try:
-        copy_text("Crowe Vibe Whisper test ✓ ünïcode")
-        assert read_text() == "Crowe Vibe Whisper test ✓ ünïcode"
+        copy_text("LexiVox test ✓ ünïcode")
+        assert read_text() == "LexiVox test ✓ ünïcode"
     finally:
         copy_text(original)

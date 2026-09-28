@@ -40,7 +40,8 @@ from app.logging_setup import setup_logging  # noqa: E402
 from app.overlay import RecordingOverlay  # noqa: E402
 from app.tray import Tray  # noqa: E402
 from app.winshell import (  # noqa: E402
-    enable_dpi_awareness, ensure_shortcut, register_app_id, set_window_icon, write_icon,
+    enable_dpi_awareness, ensure_shortcut, register_app_id, remove_legacy_identity,
+    set_window_icon, write_icon,
 )
 
 log = logging.getLogger("launcher")
@@ -167,6 +168,7 @@ class Launcher:
         try:
             self.icon_ico, icon_png = write_icon(self.paths.root / "icon")
             register_app_id(icon_png)
+            remove_legacy_identity()
             threading.Thread(
                 target=ensure_shortcut, args=(Path(__file__).resolve().parent,), daemon=True
             ).start()

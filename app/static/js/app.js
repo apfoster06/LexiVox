@@ -1,9 +1,9 @@
-// Crowe Vibe Whisper: shared helpers, tabs, state loading and the event stream.
+// LexiVox: shared helpers, tabs, state loading and the event stream.
 // Plain JS, no build step. Server text is inserted with textContent, never innerHTML.
 // dictation.js, files.js and settings.js register renderers and event handlers here.
 "use strict";
 
-const HEADER = { "X-Requested-With": "CroweVibeWhisper" };
+const HEADER = { "X-Requested-With": "LexiVox" };
 const $ = (id) => document.getElementById(id);
 
 const state = {

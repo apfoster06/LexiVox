@@ -1,7 +1,7 @@
 """OpenVINO GenAI: Intel GPUs (Arc, Iris Xe) and a fast path on any x86 CPU.
 
 The Intel NPU is not offered yet: with OpenVINO 2026.4 the Whisper pipeline fails on
-the NPU of a Core Ultra 226V ("roi_end <= max_dim"). Set CVW_ENABLE_NPU=1 to list it
+the NPU of a Core Ultra 226V ("roi_end <= max_dim"). Set LEXIVOX_ENABLE_NPU=1 to list it
 anyway; the engine falls back to the CPU if it fails.
 
 Compiled models are cached (CACHE_DIR), so the slow first GPU load (~15 s) only
@@ -66,7 +66,7 @@ class OpenVinoBackend:
                 vendor = "intel" if "intel" in name.lower() else ""
                 devices.append(Device("gpu", vendor, name, dev))
             elif dev.startswith("NPU"):
-                if os.environ.get("CVW_ENABLE_NPU") == "1":
+                if os.environ.get("LEXIVOX_ENABLE_NPU") == "1":
                     devices.append(Device("npu", "intel", name, dev))
             elif dev == "CPU":
                 devices.append(Device("cpu", "", name, dev))

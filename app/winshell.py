@@ -16,7 +16,7 @@ from .config import APP_NAME
 
 log = logging.getLogger(__name__)
 
-APP_ID = "CroweVibeWhisper.App"
+APP_ID = "LexiVox.App"
 
 
 def enable_dpi_awareness() -> None:
@@ -62,9 +62,31 @@ def register_app_id(icon_png: Path) -> None:
         log.warning("could not register the app name for notifications")
 
 
+LEGACY_NAME, LEGACY_APP_ID = "Crowe Vibe Whisper", "CroweVibeWhisper.App"
+
+
+def _programs_dir() -> Path:
+    return Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+
+
 def start_menu_shortcut() -> Path:
-    programs = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
-    return programs / f"{APP_NAME}.lnk"
+    return _programs_dir() / f"{APP_NAME}.lnk"
+
+
+def remove_legacy_identity() -> None:
+    """Remove the shortcut and app-ID entry this app created under its old name."""
+    if os.name != "nt":
+        return
+    try:
+        (_programs_dir() / f"{LEGACY_NAME}.lnk").unlink(missing_ok=True)
+    except OSError:
+        pass
+    try:
+        import winreg
+
+        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\AppUserModelId\{LEGACY_APP_ID}")
+    except OSError:
+        pass  # already gone
 
 
 def ensure_shortcut(project_root: Path) -> None:
