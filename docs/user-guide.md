@@ -47,8 +47,12 @@ with a **Copy** button. An **AI** tag marks polished ones.
 
 ### The recording pill
 
-While you dictate in another program, a small pill shows "Recording 0:07" with a
-microphone level bar. It never takes focus, so it can't steal your paste. Choose where
+While you dictate in another program, a small pill shows a live waveform of your voice
+and a timer, then "Transcribing" or "Polishing" while LexiVox works.
+
+![The recording pill in its four states](img/recording-pill.png)
+
+It never takes focus, so it can't steal your paste. Choose where
 it appears in **Settings > Microphone & recording > Recording indicator**: above the
 taskbar, the right edge (vertical), or off. It's hidden when the LexiVox window is in
 front, since the window already shows the state.
