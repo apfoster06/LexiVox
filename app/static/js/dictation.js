@@ -21,15 +21,15 @@ function renderDictation(update) {
   document.body.classList.toggle("dict-recording", recording);
 
   let status;
-  if (recording) status = `Listening${s.mode === "polish" ? " (AI polish)" : ""}… ${fmtTime(s.seconds || 0)}`;
+  if (recording) status = s.mode === "polish" ? "Listening · AI polish" : "Listening";
   else if (busy) status = DICT_STATUS[s.state];
   else status = s.hotkey ? "Ready" : "Ready. Click the mic or set a shortcut in Settings.";
   $("dict-status").textContent = status;
-  const level = $("dict-level");
-  const loudness = recording ? Math.min(1, (s.level || 0) * 3) : 0;
-  level.hidden = !recording;
-  level.value = loudness;
-  btn.style.setProperty("--level", String(loudness)); // the tile swells with your voice
+  const loudness = recording ? Math.pow(Math.min(1, (s.level || 0) * 3.5), 0.6) : 0;
+  btn.parentElement.style.setProperty("--level", loudness.toFixed(3)); // the glow follows your voice
+  $("dict-time").hidden = !recording;
+  if (recording) $("dict-time").textContent = fmtTime(s.seconds || 0);
+  waveSet(recording || busy ? s.state : "idle", s.level);
 
   if (s.hotkey !== undefined) {
     $("hk-dictate").textContent = s.hotkey || "Off";

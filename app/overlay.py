@@ -1,7 +1,9 @@
 """Small always-on-top "Recording" pill shown while dictating from another app.
 
-It's a Tk window on its own thread, styled so it can never take focus (so it can't
-steal the paste), doesn't appear in the taskbar, and lets clicks pass through.
+It's a plain Win32 window on its own thread, styled so it
+can never take focus (so it can't steal the paste), doesn't appear in the taskbar, and
+lets clicks pass through. The picture comes from overlay_render.py and is pushed to
+the screen as a per-pixel-alpha layered window, so its edges and shadow are smooth.
 It's hidden whenever the app's own window is in front, since that shows the state.
 
 Positions: "bottom" = horizontal, centred just above the taskbar; "right" = vertical,
@@ -16,28 +18,27 @@ import logging
 import os
 import queue
 import threading
+import time
 from ctypes import wintypes
 from typing import Callable
 
 log = logging.getLogger(__name__)
 
-GWL_EXSTYLE = -20
 WS_EX_TOPMOST, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT = 0x8, 0x80, 0x20
 WS_EX_LAYERED, WS_EX_NOACTIVATE = 0x80000, 0x08000000
 SW_HIDE, SW_SHOWNOACTIVATE = 0, 4
 SWP_NOACTIVATE = 0x10
 HWND_TOPMOST = -1
 MONITOR_DEFAULTTOPRIMARY = 1
+ULW_ALPHA = 2
+WS_POPUP = 0x80000000
+PM_REMOVE = 1
 
-KEY = "#ff00fe"  # transparent colour for the rounded ends
-BG, FG = "#120a26", "#f5f0ff"  # brand ink and its light text
-STYLE = {  # state -> (dot colour, label); same colour language as the tray icon
-    "recording": ("#ff6b00", "Recording"),  # ember
-    "transcribing": ("#8b5cff", "Transcribing…"),  # ultraviolet, lifted to read on ink
-    "polishing": ("#ccff00", "Polishing…"),  # volt
-}
+STATES = ("recording", "transcribing", "polishing")
 LONG, SHORT = 210, 38  # pill size at 100% scaling
 MARGIN = 16
+FRAME_MS, IDLE_MS = 33, 100  # redraw interval while shown / while hidden
+FADE_SECONDS = 0.16
 
 
 class MONITORINFO(ctypes.Structure):
@@ -47,9 +48,30 @@ class MONITORINFO(ctypes.Structure):
     ]
 
 
-def _fmt(seconds: float) -> str:
-    s = int(seconds)
-    return f"{s // 60}:{s % 60:02d}"
+class WNDCLASSW(ctypes.Structure):
+    _fields_ = [
+        ("style", wintypes.UINT), ("lpfnWndProc", ctypes.c_void_p), ("cbClsExtra", ctypes.c_int),
+        ("cbWndExtra", ctypes.c_int), ("hInstance", ctypes.c_void_p), ("hIcon", ctypes.c_void_p),
+        ("hCursor", ctypes.c_void_p), ("hbrBackground", ctypes.c_void_p),
+        ("lpszMenuName", wintypes.LPCWSTR), ("lpszClassName", wintypes.LPCWSTR),
+    ]
+
+
+class BITMAPINFOHEADER(ctypes.Structure):
+    _fields_ = [
+        ("biSize", wintypes.DWORD), ("biWidth", wintypes.LONG), ("biHeight", wintypes.LONG),
+        ("biPlanes", wintypes.WORD), ("biBitCount", wintypes.WORD), ("biCompression", wintypes.DWORD),
+        ("biSizeImage", wintypes.DWORD), ("biXPelsPerMeter", wintypes.LONG),
+        ("biYPelsPerMeter", wintypes.LONG), ("biClrUsed", wintypes.DWORD),
+        ("biClrImportant", wintypes.DWORD),
+    ]
+
+
+class BLENDFUNCTION(ctypes.Structure):
+    _fields_ = [
+        ("BlendOp", ctypes.c_ubyte), ("BlendFlags", ctypes.c_ubyte),
+        ("SourceConstantAlpha", ctypes.c_ubyte), ("AlphaFormat", ctypes.c_ubyte),
+    ]
 
 
 def pill_rect(position: str, work: tuple[int, int, int, int], scale: float) -> tuple[int, int, int, int]:
@@ -62,8 +84,13 @@ def pill_rect(position: str, work: tuple[int, int, int, int], scale: float) -> t
 
 
 class RecordingOverlay:
-    def __init__(self, get_position: Callable[[], str] = lambda: "bottom") -> None:
+    def __init__(
+        self,
+        get_position: Callable[[], str] = lambda: "bottom",
+        get_level: Callable[[], float] | None = None,
+    ) -> None:
         self._get_position = get_position
+        self._get_level = get_level  # live mic peak; smoother than the snapshots' level
         self._queue: queue.Queue[dict | None] = queue.Queue()
         self._thread: threading.Thread | None = None
         self._snap: dict = {"state": "idle"}
@@ -80,46 +107,68 @@ class RecordingOverlay:
     def stop(self) -> None:
         self._queue.put(None)
 
-    # ---- Tk thread ----------------------------------------------------------------
+    # ---- overlay thread -----------------------------------------------------------
 
     def _run(self) -> None:
         try:
-            import tkinter as tk
+            from app.overlay_render import PillRenderer
         except ImportError:
-            log.warning("tkinter not available; no recording overlay")
+            log.warning("Pillow not available; no recording overlay")
             return
         user32 = ctypes.WinDLL("user32")
-        user32.GetParent.restype = wintypes.HWND
+        gdi32 = ctypes.WinDLL("gdi32")
+        handle = ctypes.c_void_p
         user32.GetForegroundWindow.restype = wintypes.HWND
         user32.MonitorFromWindow.restype = wintypes.HMONITOR
         user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
         user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
-        user32.GetWindowLongW.restype = ctypes.c_long
+        user32.CreateWindowExW.restype = wintypes.HWND
+        user32.CreateWindowExW.argtypes = [
+            wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            wintypes.HWND, handle, handle, handle,
+        ]
+        user32.DestroyWindow.argtypes = [wintypes.HWND]
+        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
         user32.SetWindowPos.argtypes = [
             wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
             wintypes.UINT,
         ]
+        user32.GetDC.restype = handle
+        user32.GetDC.argtypes = [wintypes.HWND]
+        user32.ReleaseDC.argtypes = [wintypes.HWND, handle]
+        user32.UpdateLayeredWindow.argtypes = [
+            wintypes.HWND, handle, ctypes.POINTER(wintypes.POINT), ctypes.POINTER(wintypes.SIZE),
+            handle, ctypes.POINTER(wintypes.POINT), wintypes.DWORD, ctypes.POINTER(BLENDFUNCTION),
+            wintypes.DWORD,
+        ]
+        gdi32.CreateCompatibleDC.restype = handle
+        gdi32.CreateCompatibleDC.argtypes = [handle]
+        gdi32.CreateDIBSection.restype = handle
+        gdi32.CreateDIBSection.argtypes = [
+            handle, ctypes.POINTER(BITMAPINFOHEADER), wintypes.UINT, ctypes.POINTER(ctypes.c_void_p),
+            handle, wintypes.DWORD,
+        ]
+        gdi32.SelectObject.restype = handle
+        gdi32.SelectObject.argtypes = [handle, handle]
+        gdi32.DeleteObject.argtypes = [handle]
+        gdi32.DeleteDC.argtypes = [handle]
         shcore = getattr(ctypes.windll, "shcore", None)
 
-        root = tk.Tk()
-        root.attributes("-alpha", 0.0)  # mapped once (invisibly) so the real window exists
-        root.overrideredirect(True)
-        root.attributes("-topmost", True)
-        root.attributes("-transparentcolor", KEY)
-        root.configure(bg=KEY)
-        canvas = tk.Canvas(root, bg=KEY, highlightthickness=0, borderwidth=0)
-        canvas.pack(fill="both", expand=True)
-        root.geometry("1x1+0+0")
-        root.update()
-
-        hwnd = user32.GetParent(root.winfo_id()) or root.winfo_id()
-        ex = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-        ex |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAYERED
-        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex)
-        user32.ShowWindow(hwnd, SW_HIDE)
-        root.attributes("-alpha", 0.96)
+        # No window procedure of our own: Windows' default one is all this window needs.
+        cls = WNDCLASSW(lpfnWndProc=ctypes.cast(user32.DefWindowProcW, ctypes.c_void_p).value,
+                        lpszClassName="LexiVoxRecordingPill")
+        user32.RegisterClassW(ctypes.byref(cls))  # fails harmlessly if already registered
+        hwnd = user32.CreateWindowExW(
+            WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAYERED,
+            cls.lpszClassName, "", WS_POPUP, 0, 0, 1, 1, None, None, None, None)
+        if not hwnd:
+            log.warning("could not create the recording overlay window")
+            return
         pid = os.getpid()
-        view = {"shown": False, "layout": None}  # layout = (position, x, y, w, h)
+        # layout = (position, x, y, w, h, scale); alpha = fade, 0..1
+        view: dict = {"shown": False, "layout": None, "pill": None, "alpha": 0.0,
+                      "state": "recording", "last": time.perf_counter()}
 
         def app_in_front() -> bool:
             fg = user32.GetForegroundWindow()
@@ -143,90 +192,83 @@ class RecordingOverlay:
             w = info.rcWork
             return (w.left, w.top, w.right, w.bottom), dpi_x.value / 96
 
-        def draw(position: str, w: int, h: int, scale: float) -> dict:
-            """(Re)draw the pill shapes; returns the canvas items that change."""
-            canvas.delete("all")
-            canvas.configure(width=w, height=h)
-            r = min(w, h)
-            canvas.create_oval(0, 0, r, r, fill=BG, outline="")
-            canvas.create_oval(w - r, h - r, w, h, fill=BG, outline="")
-            if position == "right":
-                canvas.create_rectangle(0, r // 2, w, h - r // 2, fill=BG, outline="")
-            else:
-                canvas.create_rectangle(r // 2, 0, w - r // 2, h, fill=BG, outline="")
-            d = round(12 * scale)
-            c = r // 2
-            dot = canvas.create_oval(c - d // 2, c - d // 2, c + d // 2, c + d // 2, fill=STYLE["recording"][0], outline="")
-            font = ("Segoe UI", -round(14 * scale), "bold")  # negative = pixels
-            if position == "right":
-                # Reads top to bottom, like a book spine.
-                label = canvas.create_text(c, r + round(2 * scale), anchor="w", angle=-90, fill=FG, font=font)
-            else:
-                label = canvas.create_text(r, c, anchor="w", fill=FG, font=font)
-            meter = canvas.create_rectangle(0, 0, 0, 0, fill=STYLE["recording"][0], outline="")
-            return {"dot": dot, "label": label, "meter": meter}
+        def present(image, x: int, y: int, alpha: float) -> None:
+            """Put an RGBA image on screen as the window's whole content."""
+            w, h = image.size
+            data = image.tobytes("raw", "BGRa")  # premultiplied, as the compositor wants
+            screen = user32.GetDC(None)
+            mem = gdi32.CreateCompatibleDC(screen)
+            header = BITMAPINFOHEADER(ctypes.sizeof(BITMAPINFOHEADER), w, -h, 1, 32)  # top-down
+            bits = ctypes.c_void_p()
+            bitmap = gdi32.CreateDIBSection(mem, ctypes.byref(header), 0, ctypes.byref(bits), None, 0)
+            try:
+                if not bitmap or not bits:
+                    return
+                ctypes.memmove(bits, data, len(data))
+                old = gdi32.SelectObject(mem, bitmap)
+                blend = BLENDFUNCTION(0, 0, round(255 * alpha), 1)  # AC_SRC_OVER, AC_SRC_ALPHA
+                user32.UpdateLayeredWindow(
+                    hwnd, screen, ctypes.byref(wintypes.POINT(x, y)), ctypes.byref(wintypes.SIZE(w, h)),
+                    mem, ctypes.byref(wintypes.POINT(0, 0)), 0, ctypes.byref(blend), ULW_ALPHA)
+                gdi32.SelectObject(mem, old)
+            finally:
+                if bitmap:
+                    gdi32.DeleteObject(bitmap)
+                gdi32.DeleteDC(mem)
+                user32.ReleaseDC(None, screen)
 
-        items: dict = {}
-
-        def layout() -> tuple:
-            position = self._get_position()
-            work, scale = monitor_geometry()
-            x, y, w, h = pill_rect(position, work, scale)
-            return position, x, y, w, h, scale
-
-        def render() -> None:
-            nonlocal items
+        def render() -> bool:
+            """Draw one frame; returns whether the pill is (still) on screen."""
+            now = time.perf_counter()
+            dt, view["last"] = min(0.25, now - view["last"]), now
             snap = self._snap
             state = snap.get("state", "idle")
             position = self._get_position()
-            want = state in STYLE and position != "off" and not app_in_front()
-            if not want:
-                if view["shown"]:
-                    user32.ShowWindow(hwnd, SW_HIDE)
-                    view["shown"] = False
-                return
-            if not view["shown"] or view["layout"][0] != position:
-                view["layout"] = layout()  # re-measure each time it appears
-                pos, x, y, w, h, scale = view["layout"]
-                items = draw(pos, w, h, scale)
-                root.geometry(f"{w}x{h}+{x}+{y}")
-                root.update_idletasks()
-            pos, x, y, w, h, scale = view["layout"]
-            colour, text = STYLE[state]
-            if state == "recording":
-                text = f"{text}  {_fmt(snap.get('seconds', 0))}"  # plain text: Tk can't draw emoji
-                if snap.get("mode") == "polish":
-                    text += "  · AI"
-            canvas.itemconfigure(items["dot"], fill=colour)
-            canvas.itemconfigure(items["label"], text=text)
-            level = min(1.0, snap.get("level", 0) * 3)
-            bar = max(1, round(level * ((h if pos == "right" else w) - 2.2 * min(w, h))))
-            t, o = round(3 * scale), min(w, h)
-            if pos == "right":  # vertical level bar along the right side
-                canvas.coords(items["meter"], w - 2 * t, o, w - t, o + bar)
-            else:
-                canvas.coords(items["meter"], o, h - 2 * t, o + bar, h - t)
-            canvas.itemconfigure(items["meter"], fill=colour, state="normal" if state == "recording" else "hidden")
+            want = state in STATES and position != "off" and not app_in_front()
+            if want:
+                if view["alpha"] == 0.0 or view["layout"][0] != position:
+                    work, scale = monitor_geometry()  # re-measure each time it appears
+                    x, y, w, h = pill_rect(position, work, scale)
+                    view["layout"] = (position, x, y, w, h, scale)
+                    view["pill"] = PillRenderer(position, w, h, scale)
+                view["state"] = state
+            elif not view["shown"]:
+                return False
+            view["alpha"] = max(0.0, min(1.0, view["alpha"] + (dt if want else -dt) / FADE_SECONDS))
+            if view["alpha"] == 0.0:  # faded out
+                user32.ShowWindow(hwnd, SW_HIDE)
+                view["shown"] = False
+                return False
+            pill = view["pill"]
+            _, x, y, w, h, _ = view["layout"]
+            recording = want and state == "recording"
+            level = self._get_level() if self._get_level is not None else snap.get("level", 0)
+            pill.feed(level if recording else 0.0, dt)
+            image = pill.frame(view["state"], snap.get("seconds", 0), snap.get("mode", "dictate"), now)
+            present(image, x - pill.pad, y - pill.pad, view["alpha"])
             if not view["shown"]:
                 user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
-                user32.SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE)
+                user32.SetWindowPos(
+                    hwnd, HWND_TOPMOST, x - pill.pad, y - pill.pad, *image.size, SWP_NOACTIVATE)
                 view["shown"] = True
+            return True
 
-        def tick() -> None:
+        msg = wintypes.MSG()
+        while True:
             try:
                 while True:
                     item = self._queue.get_nowait()
                     if item is None:
-                        root.destroy()
+                        user32.DestroyWindow(hwnd)
                         return
                     self._snap = {**self._snap, **item}
             except queue.Empty:
                 pass
+            shown = False
             try:
-                render()
+                shown = render()
             except Exception:
                 log.exception("overlay update failed")
-            root.after(100, tick)  # always reschedule, even after an error
-
-        root.after(100, tick)
-        root.mainloop()
+            while user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, PM_REMOVE):
+                user32.DispatchMessageW(ctypes.byref(msg))
+            time.sleep((FRAME_MS if shown else IDLE_MS) / 1000)

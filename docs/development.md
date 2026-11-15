@@ -63,7 +63,8 @@ in `settings.js` (`bind(...)`); add a validation test in `test_options.py`.
 **Change the icon or colours.** Replace `assets/brand/icon.png` (a tile with a light
 glyph on a transparent background works best), run `uv run python -m app.brand` to
 regenerate `app/static/img`, and regenerate `assets/brand/lexivox.ico`. State colours
-are in `app/brand.py` (tray), `app/overlay.py` (pill) and `app/static/css/app.css`.
+are in `app/brand.py` (tray), `app/overlay_render.py` (pill), `app/static/js/waveform.js`
+(in-app waveform) and `app/static/css/app.css`.
 
 ## Decision log
 

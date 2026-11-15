@@ -69,7 +69,10 @@ class Launcher:
         self.window = None
         self.edge_mode = False
         self.tray = Tray(self.show, self.svc.dictation.toggle, self.request_quit)
-        self.overlay = RecordingOverlay(lambda: self.svc.settings.get().overlay_position)
+        self.overlay = RecordingOverlay(
+            lambda: self.svc.settings.get().overlay_position,
+            lambda: self.svc.dictation.recorder.level,
+        )
         self.icon_ico: Path | None = None
         self._told_about_tray = False
         self._last_error: str | None = None
@@ -188,7 +191,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=APP_NAME)
     parser.add_argument("--edge", action="store_true", help="use Edge app mode instead of pywebview")
     args = parser.parse_args()
-    enable_dpi_awareness()  # before any window exists (Tk overlay, tray, WebView2)
+    enable_dpi_awareness()  # before any window exists (overlay, tray, WebView2)
 
     paths = Paths(data_dir())
     paths.ensure()

@@ -7,6 +7,7 @@
   <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/waveform.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/dictation.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/files.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/settings.js') }}" defer></script>
@@ -28,11 +29,16 @@
     <!-- Dictation (main screen) -->
     <section id="tab-dictation" class="tab-panel dictation-tab" role="tabpanel" aria-labelledby="tabbtn-dictation">
       <div class="panel hero">
-        <button id="dict-btn" class="mic-btn" type="button" aria-label="Start dictation">
-          <span class="glyph" aria-hidden="true"></span>
-        </button>
+        <div class="mic-stage">
+          <button id="dict-btn" class="mic-btn" type="button" aria-label="Start dictation">
+            <span class="glyph" aria-hidden="true"></span>
+          </button>
+        </div>
         <div id="dict-status" class="dict-status" aria-live="polite">Ready</div>
-        <progress id="dict-level" max="1" value="0" hidden aria-label="Microphone level"></progress>
+        <div class="dict-live">
+          <canvas id="dict-wave" class="dict-wave" width="320" height="56" hidden aria-hidden="true"></canvas>
+          <span id="dict-time" class="dict-time" hidden>0:00</span>
+        </div>
         <p id="dict-partial" class="dict-partial" hidden></p>
         <div class="hints">
           <span><kbd id="hk-dictate">–</kbd> dictate</span>
@@ -96,7 +102,7 @@
           <div class="hk-row" data-mode="dictate" data-label="Dictate"></div>
           <div class="hk-row" data-mode="polish" data-label="Dictate + AI polish"></div>
           <div id="hk-error" class="hint error" hidden></div>
-          <p class="hint">Tick the modifier keys and pick a key, then Save. Choose "None" as the key for a
+          <p class="hint">Pick the modifier keys and a key, then Save. Choose "None" as the key for a
             modifier-only shortcut like Ctrl+Win: it fires when you let go. Press once to start, again to stop.</p>
         </fieldset>
 

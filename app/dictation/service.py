@@ -187,14 +187,16 @@ class DictationService:
         """Cut finished speech into chunks, push level/elapsed updates to the UI, and
         auto-stop at the length limit."""
         pipeline = self._pipeline
+        tick = 0
         while self.state == "recording":
             if self.recorder.seconds() >= self.recorder.max_seconds:
                 self.toggle()
                 return
-            if pipeline is not None:
+            if pipeline is not None and tick % 3 == 0:  # chunking still checks 4 times a second
                 pipeline.poll()
-            self._publish(light=True)
-            time.sleep(0.25)
+            tick += 1
+            self._publish(light=True)  # 12 levels a second keep the live waveform fluid
+            time.sleep(0.083)
 
     def _finish(self) -> None:
         pipeline = self._pipeline

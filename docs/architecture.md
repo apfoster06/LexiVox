@@ -12,7 +12,7 @@ launcher.py (main thread)
  │    └─ 16 worker threads (API requests, the Server-Sent Events stream)
  ├─ pywebview window (WebView2)  ── runs on the main thread until the app quits
  ├─ tray icon (pystray)                          thread "tray"
- ├─ recording pill (Tk)                          thread "overlay"
+ ├─ recording pill (Win32)                      thread "overlay"
  ├─ global shortcuts (Win32 message loop)        thread "hotkey"
  ├─ file job worker                              thread "job-worker"
  ├─ dictation: monitor + chunk worker            threads "dictation-monitor", "dictation-chunks"
@@ -155,7 +155,7 @@ Catalog paths are checked so they can't escape the models folder.
 | Module | Does |
 |---|---|
 | `app/tray.py` | pystray icon and menu; the icon is recoloured per dictation state |
-| `app/overlay.py` | The recording pill: a Tk window styled `WS_EX_NOACTIVATE`, `TOOLWINDOW`, `TRANSPARENT`, topmost, placed on the monitor with the focused window, scaled for its DPI |
+| `app/overlay.py` | The recording pill: a layered Win32 window (drawn by `app/overlay_render.py` with Pillow) styled `WS_EX_NOACTIVATE`, `TOOLWINDOW`, `TRANSPARENT`, topmost, placed on the monitor with the focused window, scaled for its DPI |
 | `app/winshell.py` | DPI awareness, app ID, registry display name and icon, window icon, Start menu shortcut, removing pre-rename leftovers |
 | `app/brand.py` | Splits `assets/brand/icon.png` into tile and glyph masks and recolours them; `python -m app.brand` regenerates `app/static/img` |
 

@@ -20,7 +20,7 @@ APP_ID = "LexiVox.App"
 
 
 def enable_dpi_awareness() -> None:
-    """Per-monitor DPI awareness. Must run before any window (Tk, WebView2, tray) exists,
+    """Per-monitor DPI awareness. Must run before any window (overlay, WebView2, tray) exists,
     otherwise parts of the app use scaled coordinates and others physical ones."""
     if os.name != "nt":
         return
